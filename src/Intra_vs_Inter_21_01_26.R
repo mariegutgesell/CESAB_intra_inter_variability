@@ -53,7 +53,16 @@ col_pal<-c("darkgrey","deepskyblue1","deepskyblue2","deepskyblue3","darkolivegre
 
 ## import/load datasets and prep them---------
 #load("../data/Env.RData") 
-load("data/Env_23.01.25.RData") 
+load("data/Env.RData") 
+
+##plot out on map
+Env_sf <-  st_as_sf(Env,
+  coords = c("Latitude",
+             "Longitude"),
+  crs = 4326,
+  remove = FALSE
+)
+mapview(Env_sf)
 #Load main packages------------
 
 
@@ -63,6 +72,7 @@ load("data/Env_23.01.25.RData")
 
 #ALLindiv_June2025 <- read_excel("../data/ALLindiv_June2025.xlsx")
 ALLindiv_June2025 <- read_excel("data/ALLindiv_June2025.xlsx")
+
 
 ##ALLindiv_June2025 <- read_excel("ALLindiv_January2026.xlsx")
 
@@ -93,8 +103,8 @@ SpVar<-DataFish %>%
             sp_site_var_C = var(d13C_norm, na.rm = TRUE),
             sp_site_mean_length = mean(collected_sample_total_length, na.rm = TRUE),
             sp_site_var_length = var(collected_sample_total_length, na.rm = TRUE),
-            collection_decimal_longitude = mean(collection_decimal_longitude, na.rm = TRUE),
-            collection_decimal_latitude = mean(collection_decimal_latitude, na.rm = TRUE),
+          #  collection_decimal_longitude = mean(collection_decimal_longitude, na.rm = TRUE),
+          #  collection_decimal_latitude = mean(collection_decimal_latitude, na.rm = TRUE),
             sp_site_num_ind = sum(num))
 
 SpVar$VarTot<-SpVar$sp_site_var_N+SpVar$sp_site_var_C
@@ -133,12 +143,12 @@ SpVar_sf <- SpVar_clean %>%
     crs = 4326,
     remove = FALSE
   )
-
+mapview(SpVar_sf)
 #-----------------------------------------------------------
 # 3. Ensure Env uses same CRS
 #-----------------------------------------------------------
 Env_sf <- st_transform(Env, 4326)
-
+mapview(Env_sf)
 #-----------------------------------------------------------
 # 4. Spatial join (nearest environmental site)
 #-----------------------------------------------------------
@@ -205,7 +215,9 @@ SpVar_env$num<-1
 SiteVar <- SpVar_env %>%
   group_by(
     collection_site_id,
-    Ecosystem_Type
+    Ecosystem_Type,
+   collection_decimal_latitude,
+  collection_decimal_longitude
     #lentic_ecosystem_size_km2, 
     #lotic_ecosystem_width_m
   ) %>%
@@ -222,8 +234,8 @@ SiteVar <- SpVar_env %>%
     
     site_nbspe = sum(num, na.rm = TRUE),
     
-    collection_decimal_longitude = mean(collection_decimal_longitude, na.rm = TRUE),
-    collection_decimal_latitude  = mean(collection_decimal_latitude,  na.rm = TRUE),
+  # collection_decimal_longitude = mean(collection_decimal_longitude, na.rm = TRUE),
+  #  collection_decimal_latitude  = mean(collection_decimal_latitude,  na.rm = TRUE),
     
     site_mean_sample_id = mean(sp_site_num_ind, na.rm = TRUE),
     site_min_sample_id  = min(sp_site_num_ind,  na.rm = TRUE),
@@ -269,6 +281,10 @@ test <- SiteVar %>%
   select(collection_site_id) %>%
   group_by(collection_site_id) %>%
   count()
+
+test2 <- st_as_sf(SiteVar, coords = c("collection_decimal_longitude", "collection_decimal_latitude"), crs = 4326, remove = FALSE)
+mapview(test2)
+
 
 #SiteVar <-SiteVar %>% 
 #  group_by(collection_site_id,Ecosystem_Type,lentic_ecosystem_size_km2,lotic_ecosystem_width_m, Climate_zone, Size, dis_r_sv, Distance_km, npp_mean, TP, TN, temp, hft, prec, pop, crp, urb, upstr, regul, pop_den, npp_class, size_class, size_z_scored, hydro_dis_z_scored, TP_class, Climate_zone_e, Climate_zone_e2, distance_to_env_m, match_flag) %>% 
