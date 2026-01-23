@@ -41,7 +41,7 @@ hist_C_intra <- ggplot(SiteVar, aes(x = propintraspecific_C)) +
   theme_classic()
 hist_C_intra
 
-
+##test 
 ##getting country names and continents for each site
 countries <- ne_countries(scale = "medium", returnclass = "sf") %>%
   st_make_valid() %>%
