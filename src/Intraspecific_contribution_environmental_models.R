@@ -1,4 +1,4 @@
-##Relating intrasp. variability to environmental drivers
+##Relating intrasp. variability contribution to environmental drivers
 
 library(tidyverse)
 library(cowplot)
@@ -35,9 +35,9 @@ sites1 <- SiteVar %>%
   count()
 
 ##productivity = TP
-##type = ecosystem type (lake vs. stream), ecosystem category -- missing ecosystem category for some sites (260)
+##type = ecosystem type (lake vs. stream)
 ##human ftp = hft
-##size = Size 
+##size = size_z_scored
 ##flow variability = hydro_dis_z_scored
 ##climate = temp , climate zone 
 
@@ -530,46 +530,4 @@ plot_no_sig <- ggplot() +
   labs(x = "Mean Estimated CTmax (˚C)", y = paste("Log", nutrient))
 
 
-
-
-
-#####OLD CODE ----------------------
-##ecosystem type 
-ecosystem_cat_na <- SiteVar_2 %>%
-  filter(is.na(Ecosystem_Category))
-
-##missing ecosystem category for 260 sites 
-
-SiteVar_4 <- SiteVar_2 %>%
-  filter(!is.na(Ecosystem_Category))
-
-C_type_2 <- aov(propintraspecific_C ~ Ecosystem_Category, data = SiteVar_4)
-summary(C_type_2)
-TukeyHSD(C_type_2)
-ggplot(SiteVar_4, aes(x = Ecosystem_Category, y = propintraspecific_C)) +
-  geom_boxplot()+
-  theme_classic() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-N_type_2 <- aov(propintraspecific_N ~ Ecosystem_Category, data = SiteVar_4)
-summary(N_type)
-TukeyHSD(N_type)
-ggplot(SiteVar_4, aes(x = Ecosystem_Category, y = propintraspecific_N)) +
-  geom_boxplot()+
-  theme_classic() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-
-##PPMR vs. Intrasp variability
-n_ppmr_1 <- ggplot(SiteVar_2, aes(x = PPMR.slope, y = propintraspecific_N)) +
-  geom_point()+
-  geom_smooth(method = "lm") +
-  theme_classic()
-n_ppmr_1  
-
-c_ppmr_1 <- ggplot(SiteVar_2, aes(x = PPMR.slope, y = propintraspecific_C)) +
-  geom_point()+
-  geom_smooth(method = "lm") +
-  theme_classic()
-c_ppmr_1  
 

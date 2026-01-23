@@ -1,5 +1,5 @@
-##Relative contribution of intraspecific variability to community variability relative to environmental drivers
-##Looking at drivers of variability between sites 
+##Generate map and descriptive statistics of intraspecific variability contribution 
+##
 
 library(tidyverse)
 library(readxl)
@@ -12,38 +12,10 @@ library(ggplot2)
 library(rnaturalearth)
 library(ggspatial)
 library(cowplot)
-##read in individual level si data
-#ind_df <- read_excel("data/ALLindiv_January2026.xlsx")
-
-ind_df <- read_excel("data/ALLindiv_June2025.xlsx")
-
-##read in environmental data
-#env_df <- read_excel("data/FOODWEBS_Individual_EnvironmentalData_28Aug25.xlsx")
-##for individual environmental data from august, need to find list of FW_ID for collection_site_id in the stable isotope data
-
-env_df_lentic <- read_excel("data/FOODWEBS_Individual_EnvironmentalData_13Jun25.xlsx", sheet = "Lenthic") %>%
-  rename(Ecosystem = "Ecosystem_Type")
-#env_df_lentic$Ecosystem_Type <- as.character(env_df_lentic$Ecosystem_Type)
-
-env_df_lotic <- read_excel("data/FOODWEBS_Individual_EnvironmentalData_13Jun25.xlsx", sheet = "Lotic")
-#env_df_lotic$Ecosystem_Type <- as.character(env_df_lotic$Ecosystem_Type)
-##for environmental data, follow same way they did in the FCL 
-
-env_df <- full_join(env_df_lentic, env_df_lotic)
-  
 
 
-##read in calculated relative contribution data 
-
-site_is_df <- read_tsv("data/intra_sp_variability/Intraspecific_contribution_perSite.txt") %>%
-  rename(longitude = "collection_decimal_longitude", latitude = "collection_decimal_latitude", Ecosystem = "Ecosystem_Type")
-
-
-##test merge environmental data (still need to transform metrics but lets test)
-df <- left_join(site_is_df, env_df, by = c("collection_site_id", "Ecosystem"))
-
-
-
+##read in contribution of site level intraspecific contribution RData
+load("data/Intraspecific_contribution_perSite_Env.RData")
 
 ##C:N ratio -- look for effect especially in muscle, but may not be available 
 
@@ -59,13 +31,13 @@ df <- left_join(site_is_df, env_df, by = c("collection_site_id", "Ecosystem"))
 
 
 ##plotting distributions
-hist_N_intra <- ggplot(df, aes(x = propintraspecific_N, group = Ecosystem)) +
+hist_N_intra <- ggplot(SiteVar, aes(x = propintraspecific_N)) +
   geom_histogram() +
   theme_classic() 
 hist_N_intra
 
-hist_C_intra <- ggplot(df, aes(x = propintraspecific_C)) +
-  geom_histogram(fill = "darkcyan") +
+hist_C_intra <- ggplot(SiteVar, aes(x = propintraspecific_C)) +
+  geom_histogram() +
   theme_classic()
 hist_C_intra
 
@@ -76,8 +48,8 @@ countries <- ne_countries(scale = "medium", returnclass = "sf") %>%
   st_transform(4326)
 
 sites <- st_as_sf(
-  df,
-  coords = c("longitude", "latitude"),
+  SiteVar,
+  coords = c("collection_decimal_longitude", "collection_decimal_latitude"),
   crs = 4326,
   remove = FALSE
 )
@@ -109,11 +81,11 @@ if (length(na_idx) > 0) {
 }
 
 test <- sites_geo %>%
-  select(collection_site_id, Ecosystem, country, continent, propintraspecific_N, propintraspecific_C) %>%
+  select(collection_site_id, Ecosystem_Type, country, continent, propintraspecific_N, propintraspecific_C) %>%
   filter(is.na(continent))
 
 sites_geo <- sites_geo %>%
-  select(collection_site_id, Ecosystem, country, continent, propintraspecific_N, propintraspecific_C) %>%
+  select(collection_site_id, Ecosystem_Type, country, continent, propintraspecific_N, propintraspecific_C) %>%
   pivot_longer(cols= c(propintraspecific_N, propintraspecific_C), names_to = "prop_intraspecific_var_type", values_to = "prop_intraspecific_var") %>%
   mutate(prop_type = case_when(
     startsWith("propintraspecific_N", prop_intraspecific_var_type) ~ "N",
@@ -125,7 +97,7 @@ sites_geo <- sites_geo %>%
 #color1 <- c("darkred", "darkcyan")
 color1 <- c("white", "darkgrey")
 violin_c_n <- sites_geo  %>%
-  ggplot(aes(x = Ecosystem, y = prop_intraspecific_var,  fill = prop_type)) +
+  ggplot(aes(x = Ecosystem_Type, y = prop_intraspecific_var,  fill = prop_type)) +
   geom_violin() +
   scale_fill_manual(values = color1)+
   theme_classic() +
@@ -145,7 +117,7 @@ violin_c_n_2 <- sites_geo %>%
 violin_c_n_2
 
 box_c_n <- sites_geo %>%
-  ggplot(aes(x = prop_type, y = prop_intraspecific_var, fill = Ecosystem)) +
+  ggplot(aes(x = prop_type, y = prop_intraspecific_var, fill = Ecosystem_Type)) +
   geom_boxplot() +
   scale_fill_manual(values = color1)+
   theme_classic() +
@@ -221,7 +193,7 @@ names(boxplots) <- continents
 
 
 
-cn_correlation <- ggplot(df, aes(x = propintraspecific_C, y = propintraspecific_N)) +
+cn_correlation <- ggplot(SiteVar, aes(x = propintraspecific_C, y = propintraspecific_N)) +
   geom_point(color = "black") +
   geom_smooth(method = "lm", color = "darkred") +
   theme_classic() +
@@ -230,7 +202,7 @@ cn_correlation <- ggplot(df, aes(x = propintraspecific_C, y = propintraspecific_
 
 cn_correlation
 
-lm1 <- lm(propintraspecific_N ~ propintraspecific_C, data = df)
+lm1 <- lm(propintraspecific_N ~ propintraspecific_C, data = SiteVar)
 summary(lm1)
 
 
@@ -238,11 +210,11 @@ plot_1 <- ggarrange(box_c_n_2, cn_correlation, legend = "none", nrow = 1, ncol =
 plot_1
 
 
-ggplot(df, aes(x = log(site_nbspe), y = propintraspecific_C)) +
+ggplot(SiteVar, aes(x = log(site_nbspe), y = propintraspecific_C)) +
   geom_point() +
   geom_smooth(method = "lm")
 
-ggplot(df, aes(x = log(site_nbspe), y = propintraspecific_N)) +
+ggplot(SiteVar, aes(x = log(site_nbspe), y = propintraspecific_N)) +
   geom_point() +
   geom_smooth(method = "lm")
 
@@ -254,14 +226,8 @@ ggplot(df, aes(x = log(site_nbspe), y = propintraspecific_N)) +
 ##trying 
 ##Plotting out some maps 
 
-sites_coord <- st_as_sf(df, coords = c("longitude", "latitude"), crs = 4326)
-site_map <- mapview(sites_coord, map.types = "Esri.NatGeoWorldMap", legend = FALSE)
-site_map
-
-
-
-
-##make map manuscript style
+sites_coord <- st_as_sf(SiteVar, coords = c("collection_decimal_longitude", "collection_decimal_latitude"), crs = 4326)
+mapview(sites_coord)
 
 world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
 
@@ -286,6 +252,8 @@ p_map <- ggplot() +
   theme(plot.background = element_rect(fill = "white", color = NA))
 
 p_map
+
+##something is wrong with the lat/longs here...have some points in the middle of the ocean 
 
 #ggsave("sites_global_map.pdf", p, width = 7.0, height = 4.2, units = "in")
 #ggsave("sites_global_map.png", p, width = 7.0, height = 4.2, units = "in", dpi = 600)
@@ -319,109 +287,6 @@ p_final
 
 
 
-
-
 plot_2 <- ggarrange(p_map, plot_1, legend = "none", nrow = 2, ncol = 1, labels = c("a)", ""), font.label = list(colour = "black", size = 12))
 plot_2
-
-##getting country names and continents for each site
-
-countries <- ne_countries(scale = "medium", returnclass = "sf")
-
-sites <- st_as_sf(
-  df,
-  coords = c("longitude", "latitude"),
-  crs = 4326,
-  remove = FALSE
-)
-
-sites_geo <- st_join(
-  sites,
-  countries[, c("admin", "iso_a3", "continent")],
-  join = st_within
-) %>%
-  rename(country = "admin")
-
-
-
-##Do we see correlation between proportion intraspecifc variability in C and N? 
-ggplot(df, aes(x = propintraspecific_C, y = propintraspecific_N)) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  theme_classic()
-
-lm1 <- lm(propintraspecific_N ~ propintraspecific_C, data = df)
-summary(lm1)
-
-gamm1.1 <- gam(LC_pred_mean ~ summer_air_temp_mean + log_area_ha + log_lt_cue + s(sampling_year_mean, bs = "re"),
-               data = df_summary, method = "REML")
-summary(gamm1.1)
-visreg(gamm1.1, "summer_air_temp_mean", partial = TRUE)
-visreg(gamm1.1, "log_area_ha", partial = TRUE)
-visreg(gamm1.1, "log_lt_cue", partial = TRUE)
-
-lm3 <- lm(SEAc ~ summer_air_temp + log_area_ha + log_pred_cue, data = siber_df_final)
-summary(lm3)
-
-
-
-##add species richness as a random effect
-
-###OLD --------------------------------
-#Map with no color indication just sites 
-##Plot of proportion intraspecific variability in C
-leaflet(sites_coord) |>
-  addProviderTiles(providers$CartoDB.PositronNoLabels) |>
-  addCircleMarkers(radius = 2,  color = "black", fillColor = "black",  fillOpacity = 0.9,
-                   weight = 1,
-                   popup = ~paste0("propintraspecific_C: ", signif(vals, 3))
-  ) %>%
-  addScaleBar(position = c("bottomleft"))
-
-
-# color palette 
-pal <- colorNumeric(
-  palette = "viridis",
-  domain  = vals,
-  na.color = "lightgray"
-)
-
-pal_1 <- colorNumeric(
-  palette = c("cyan1", "darkcyan", "darkblue"),   # <–– choose any colors
-  domain  = vals,
-  na.color = "lightgray"
-)
-##Plot of proportion intraspecific variability in C
-leaflet(sites_coord) |>
-  addProviderTiles(providers$CartoDB.Positron) |>
-  addCircleMarkers(radius = 4,  color = ~pal_1(vals), fillColor = ~pal_1(vals),  fillOpacity = 0.9,
-                   weight = 1,
-                   popup = ~paste0("propintraspecific_C: ", signif(vals, 3))
-  ) |>
-  addLegend(
-    "bottomright",
-    pal = pal_1,
-    values = vals,
-    title = "Intraspecific\nproportion\nC"
-  )
-
-
-##Plot of proportion intraspecific variability in N
-pal_2 <- colorNumeric(
-  palette = c("lightpink", "pink4", "darkred"),   # <–– choose any colors
-  domain  = vals,
-  na.color = "lightgray"
-)
-leaflet(sites_coord) |>
-  addProviderTiles(providers$CartoDB.Positron) |>
-  addCircleMarkers(radius = 4,  color = ~pal_2(vals), fillColor = ~pal_2(vals),  fillOpacity = 0.9,
-                   weight = 1,
-                   popup = ~paste0("propintraspecific_N: ", signif(vals, 3))
-  ) |>
-  addLegend(
-    "bottomright",
-    pal = pal_2,
-    values = vals,
-    title = "Intraspecific\nproportion\nN"
-  )
 
