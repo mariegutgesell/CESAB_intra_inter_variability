@@ -11,7 +11,7 @@ load("data/SpeciesIntraspecific_variance_perSite_Env.RData")
 sp_var_mean <- SpVar_env %>%
   group_by(fish_species, waterbody_type) %>% ##separated by ecosystem type- but this may not be necessary 
   filter(!is.na(sp_site_var_N)) %>% 
-  summarise_at(vars(sp_site_var_C, sp_site_var_N), list(mean = mean))
+  summarise_at(vars(sp_site_var_C, sp_site_var_N), list(mean = mean, sd = sd))
 
 ##then you would want to join this to trait data 
 
