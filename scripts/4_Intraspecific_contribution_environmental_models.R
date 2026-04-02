@@ -20,7 +20,7 @@ library(visreg)
 library(car)
 
 
-##Load intraspecific variability data 
+##Load intraspecific variability at site level data 
 load("data/Intraspecific_contribution_perSite_Env.RData")
 
 ##checking duplicate site names/lat longs -- don't worry about for now, come back to once using final data
@@ -52,12 +52,12 @@ str(exp_var)
 
 duplicated_exp_variables <- SiteVar %>%
   select(collection_site_id,collection_decimal_longitude, collection_decimal_latitude,
-         Ecosystem_Type, Climate_zone_e2, TP,
+         waterbody_type, Climate_zone_e2, TP,
          size_z_scored, hydro_dis_z_scored, hft) %>%
   filter(
-    duplicated(select(., Ecosystem_Type, Climate_zone_e2, TP,
+    duplicated(select(., waterbody_type, Climate_zone_e2, TP,
                       size_z_scored, hydro_dis_z_scored, hft)) |
-      duplicated(select(., Ecosystem_Type, Climate_zone_e2, TP,
+      duplicated(select(., waterbody_type, Climate_zone_e2, TP,
                         size_z_scored, hydro_dis_z_scored, hft), fromLast = TRUE)
   )
 
@@ -72,8 +72,72 @@ corr_mat <- cor(exp_var, use = "pairwise.complete.obs")
 # visualize
 corrplot(corr_mat, method = "color", type = "upper",  addCoef.col = "black",
          tl.col = "black", tl.srt = 45)
+
+
+##Relationships between C/N prop variatibility and species richness
+SiteVar <- SiteVar %>%
+  mutate(site_nbspe_log = log(site_nbspe))
+C_sp_beta <- betareg(propintraspecific_C ~ site_nbspe_log, data = SiteVar)
+summary(C_sp_beta)
+
+# create sequence for TP
+newdat <- data.frame(
+  site_nbspe_log = seq(min(SiteVar$site_nbspe_log, na.rm = TRUE),
+           max(SiteVar$site_nbspe_log, na.rm = TRUE),
+           length.out = 100)
+)
+
+# predictions
+newdat$pred <- predict(C_sp_beta, newdata = newdat, type = "response")
+
+ggplot(SiteVar, aes(x =site_nbspe_log , y = propintraspecific_C)) +
+  geom_point() +
+  geom_line(data = newdat, aes(x = site_nbspe_log, y = pred), linewidth = 1)
+
+N_sp_beta <- betareg(propintraspecific_N ~ site_nbspe_log, data = SiteVar)
+summary(N_sp_beta)
+
+# create sequence for TP
+newdat <- data.frame(
+  site_nbspe_log = seq(min(SiteVar$site_nbspe_log, na.rm = TRUE),
+                       max(SiteVar$site_nbspe_log, na.rm = TRUE),
+                       length.out = 100)
+)
+
+# predictions
+newdat$pred <- predict(N_sp_beta, newdata = newdat, type = "response")
+
+ggplot(SiteVar, aes(x =site_nbspe_log , y = propintraspecific_N)) +
+  geom_point() +
+  geom_line(data = newdat, aes(x = site_nbspe_log, y = pred), linewidth = 1)
+
+
+
+
 ##Simple Univariate Models 
 ##total phosphorous
+library(betareg)
+
+C_TP_beta <- betareg(propintraspecific_C ~ TP + site_nbspe_log, data = SiteVar)
+summary(C_TP_beta)
+
+# create sequence for TP
+newdat <- data.frame(
+  TP = seq(min(SiteVar$TP, na.rm = TRUE),
+           max(SiteVar$TP, na.rm = TRUE),
+           length.out = 100),
+  site_nbspe_log = mean(SiteVar$site_nbspe_log, na.rm = TRUE)  # hold constant
+)
+
+# predictions
+newdat$pred <- predict(C_TP_beta, newdata = newdat, type = "response")
+
+ggplot(SiteVar, aes(x = TP, y = propintraspecific_C)) +
+  geom_point() +
+  geom_line(data = newdat, aes(x = TP, y = pred), linewidth = 1)
+
+
+##regular linear regressions
 C_TP <- lm(propintraspecific_C ~ TP, data = SiteVar)
 summary(C_TP)
 c_tp_1 <- ggplot(SiteVar, aes(x = TP, y = propintraspecific_C)) +
@@ -87,11 +151,31 @@ c_tp_2 <- ggplot(SiteVar, aes(x = TP, y = propintraspecific_C, group = Climate_z
   theme_classic()
 c_tp_2
 
-c_tp_3 <- ggplot(SiteVar, aes(x = TP, y = propintraspecific_C, group = Ecosystem_Type, color = Ecosystem_Type)) +
+c_tp_3 <- ggplot(SiteVar, aes(x = TP, y = propintraspecific_C, group = waterbody_type, color = waterbody_type)) +
   geom_point() +
   geom_smooth(method= "lm") +
   theme_classic()
 c_tp_3
+
+N_TP_beta <- betareg(propintraspecific_N ~ TP + site_nbspe_log, data = SiteVar)
+summary(N_TP_beta)
+
+# create sequence for TP
+newdat <- data.frame(
+  TP = seq(min(SiteVar$TP, na.rm = TRUE),
+           max(SiteVar$TP, na.rm = TRUE),
+           length.out = 100),
+  site_nbspe = mean(SiteVar$site_nbspe, na.rm = TRUE)  # hold constant
+)
+
+# predictions
+newdat$pred <- predict(N_TP_beta, newdata = newdat, type = "response")
+
+ggplot(SiteVar, aes(x = TP, y = propintraspecific_N)) +
+  geom_point() +
+  geom_line(data = newdat, aes(x = TP, y = pred), linewidth = 1)
+
+
 
 N_TP <- lm(propintraspecific_N ~ TP, data = SiteVar)
 summary(N_TP)
@@ -107,7 +191,7 @@ n_tp_2 <- ggplot(SiteVar, aes(x = TP, y = propintraspecific_N, group = Climate_z
   theme_classic()
 n_tp_2
 
-n_tp_3 <- ggplot(SiteVar, aes(x = TP, y = propintraspecific_N, group = Ecosystem_Type, color = Ecosystem_Type)) +
+n_tp_3 <- ggplot(SiteVar, aes(x = TP, y = propintraspecific_N, group = waterbody_type, color = waterbody_type)) +
   geom_point() +
   geom_smooth(method= "lm") +
   theme_classic()
@@ -119,18 +203,62 @@ ggarrange(n_tp_1, n_tp_2, n_tp_3, nrow = 3, ncol = 1)
 ##include interaction for TP and climate 
 ##so would want a climate zone * TP interaction 
 ##human footprint
+C_hft_beta <- betareg(propintraspecific_C ~ hft + site_nbspe_log, data = SiteVar)
+summary(C_hft_beta)
+
+# create sequence for TP
+newdat <- data.frame(
+  hft = seq(min(SiteVar$hft, na.rm = TRUE),
+           max(SiteVar$hft, na.rm = TRUE),
+           length.out = 100),
+  site_nbspe = mean(SiteVar$site_nbspe, na.rm = TRUE)  # hold constant
+)
+
+# predictions
+newdat$pred <- predict(C_hft_beta, newdata = newdat, type = "response")
+
+ggplot(SiteVar, aes(x = hft, y = propintraspecific_C)) +
+  geom_point() +
+  geom_line(data = newdat, aes(x = hft, y = pred), linewidth = 1)
+
+
+
+N_hft_beta <- betareg(propintraspecific_N ~ hft + site_nbspe_log, data = SiteVar)
+summary(N_hft_beta)
+
+# create sequence for TP
+newdat <- data.frame(
+  hft = seq(min(SiteVar$hft, na.rm = TRUE),
+            max(SiteVar$hft, na.rm = TRUE),
+            length.out = 100),
+  site_nbspe = mean(SiteVar$site_nbspe, na.rm = TRUE)  # hold constant
+)
+
+# predictions
+newdat$pred <- predict(N_hft_beta, newdata = newdat, type = "response")
+
+ggplot(SiteVar, aes(x = hft, y = propintraspecific_N)) +
+  geom_point() +
+  geom_line(data = newdat, aes(x = hft, y = pred), linewidth = 1)
+
+
+
+
+
+
 C_hft <- lm(propintraspecific_C ~ hft, data = SiteVar)
 summary(C_hft)
 c_hft_1 <- ggplot(SiteVar, aes(x = hft, y = propintraspecific_C)) +
   geom_point() +
   geom_smooth(method= "lm") +
   theme_classic()
+c_hft_1
 c_hft_2 <- ggplot(SiteVar, aes(x = hft, y = propintraspecific_C, group = Climate_zone_e2, color = Climate_zone_e2)) +
   geom_point() +
   geom_smooth(method= "lm") +
   theme_classic()
 
-c_hft_3 <- ggplot(SiteVar, aes(x = hft, y = propintraspecific_C, group = Ecosystem_Type, color = Ecosystem_Type)) +
+c_hft_3 <- ggplot(SiteVar, aes(x = hft, y = propintraspecific_C, group = waterbody_type, color = waterbody_type)) +
   geom_point() +
   geom_smooth(method= "lm") +
   theme_classic()
@@ -141,12 +269,13 @@ n_hft_1 <- ggplot(SiteVar, aes(x = hft, y = propintraspecific_N)) +
   geom_point() +
   geom_smooth(method= "lm") +
   theme_classic()
+n_hft_1
 n_hft_2 <- ggplot(SiteVar, aes(x = hft, y = propintraspecific_N,  group = Climate_zone_e2, color = Climate_zone_e2)) +
   geom_point() +
   geom_smooth(method= "lm") +
   theme_classic()
 
-n_hft_3 <- ggplot(SiteVar, aes(x = hft, y = propintraspecific_N,  group = Ecosystem_Type, color = Ecosystem_Type)) +
+n_hft_3 <- ggplot(SiteVar, aes(x = hft, y = propintraspecific_N,  group = waterbody_type, color = waterbody_type)) +
   geom_point() +
   geom_smooth(method= "lm") +
   theme_classic()
@@ -155,19 +284,58 @@ ggarrange(n_hft_1, n_hft_2, n_hft_3, nrow = 3, ncol = 1)
 ggarrange(c_hft_1, c_hft_2, c_hft_3, nrow = 3, ncol = 1)
 
 ##flow variability
+C_fv_beta <- betareg(propintraspecific_C ~ hydro_dis_z_scored + site_nbspe_log, data = SiteVar)
+summary(C_fv_beta)
+
+# create sequence for TP
+newdat <- data.frame(
+  hydro_dis_z_scored = seq(min(SiteVar$hydro_dis_z_scored, na.rm = TRUE),
+            max(SiteVar$hydro_dis_z_scored, na.rm = TRUE),
+            length.out = 100),
+  site_nbspe = mean(SiteVar$site_nbspe, na.rm = TRUE)  # hold constant
+)
+
+# predictions
+newdat$pred <- predict(C_fv_beta, newdata = newdat, type = "response")
+
+ggplot(SiteVar, aes(x = hydro_dis_z_scored, y = propintraspecific_C)) +
+  geom_point() +
+  geom_line(data = newdat, aes(x = hydro_dis_z_scored, y = pred), linewidth = 1)
+
+N_fv_beta <- betareg(propintraspecific_N ~ hydro_dis_z_scored + site_nbspe, data = SiteVar)
+summary(N_fv_beta)
+
+# create sequence for TP
+newdat <- data.frame(
+  hydro_dis_z_scored = seq(min(SiteVar$hydro_dis_z_scored, na.rm = TRUE),
+                           max(SiteVar$hydro_dis_z_scored, na.rm = TRUE),
+                           length.out = 100),
+  site_nbspe = mean(SiteVar$site_nbspe, na.rm = TRUE)  # hold constant
+)
+
+# predictions
+newdat$pred <- predict(N_fv_beta, newdata = newdat, type = "response")
+
+ggplot(SiteVar, aes(x = hydro_dis_z_scored, y = propintraspecific_N)) +
+  geom_point() +
+  geom_line(data = newdat, aes(x = hydro_dis_z_scored, y = pred), linewidth = 1)
+
+
+
 C_fv <- lm(propintraspecific_C ~ hydro_dis_z_scored, data = SiteVar)
 summary(C_fv)
 c_fv_1 <- ggplot(SiteVar, aes(x = hydro_dis_z_scored, y = propintraspecific_C)) +
   geom_point() +
   geom_smooth(method= "lm") +
   theme_classic()
+c_fv_1
 
 c_fv_2 <- ggplot(SiteVar, aes(x = hydro_dis_z_scored, y = propintraspecific_C,  group = Climate_zone_e2, color = Climate_zone_e2)) +
   geom_point() +
   geom_smooth(method= "lm") +
   theme_classic()
 
-c_fv_3 <- ggplot(SiteVar, aes(x = hydro_dis_z_scored, y = propintraspecific_C,  group = Ecosystem_Type, color = Ecosystem_Type)) +
+c_fv_3 <- ggplot(SiteVar, aes(x = hydro_dis_z_scored, y = propintraspecific_C,  group = waterbody_type, color = waterbody_type)) +
   geom_point() +
   geom_smooth(method= "lm") +
   theme_classic()
@@ -180,13 +348,14 @@ n_fv_1 <- ggplot(SiteVar, aes(x = hydro_dis_z_scored, y = propintraspecific_N)) 
   geom_point() +
   geom_smooth(method= "lm") +
   theme_classic()
+n_fv_1
 
 n_fv_2 <- ggplot(SiteVar, aes(x = hydro_dis_z_scored, y = propintraspecific_N,  group = Climate_zone_e2, color = Climate_zone_e2)) +
   geom_point() +
   geom_smooth(method= "lm") +
   theme_classic()
 
-n_fv_3 <- ggplot(SiteVar, aes(x = hydro_dis_z_scored, y = propintraspecific_N,  group = Ecosystem_Type, color = Ecosystem_Type)) +
+n_fv_3 <- ggplot(SiteVar, aes(x = hydro_dis_z_scored, y = propintraspecific_N,  group = waterbody_type, color = waterbody_type)) +
   geom_point() +
   geom_smooth(method= "lm") +
   theme_classic()
@@ -196,6 +365,46 @@ ggarrange(n_fv_1, n_fv_2, n_fv_3, nrow = 3, ncol = 1)
 ggarrange(c_fv_1, c_fv_2, c_fv_3, nrow = 3, ncol = 1)
 
 ##ecosystem size
+C_es_beta <- betareg(propintraspecific_C ~ size_z_scored + site_nbspe, data = SiteVar)
+summary(C_es_beta)
+
+# create sequence for TP
+newdat <- data.frame(
+  size_z_scored = seq(min(SiteVar$size_z_scored, na.rm = TRUE),
+                           max(SiteVar$size_z_scored, na.rm = TRUE),
+                           length.out = 100),
+  site_nbspe = mean(SiteVar$site_nbspe, na.rm = TRUE)  # hold constant
+)
+
+# predictions
+newdat$pred <- predict(C_es_beta, newdata = newdat, type = "response")
+
+ggplot(SiteVar, aes(x = size_z_scored, y = propintraspecific_C)) +
+  geom_point() +
+  geom_line(data = newdat, aes(x = size_z_scored, y = pred), linewidth = 1)
+
+
+
+N_es_beta <- betareg(propintraspecific_N ~ size_z_scored + site_nbspe, data = SiteVar)
+summary(N_es_beta)
+
+# create sequence for TP
+newdat <- data.frame(
+  size_z_scored = seq(min(SiteVar$size_z_scored, na.rm = TRUE),
+                      max(SiteVar$size_z_scored, na.rm = TRUE),
+                      length.out = 100),
+  site_nbspe = mean(SiteVar$site_nbspe, na.rm = TRUE)  # hold constant
+)
+
+# predictions
+newdat$pred <- predict(N_es_beta, newdata = newdat, type = "response")
+
+ggplot(SiteVar, aes(x = size_z_scored, y = propintraspecific_N)) +
+  geom_point() +
+  geom_line(data = newdat, aes(x = size_z_scored, y = pred), linewidth = 1)
+
+
+
 ##-Inf for 1 site: Swartspruit - would mean size of 0, some error 
 C_es <- lm(propintraspecific_C ~ size_z_scored, data = SiteVar)
 summary(C_es)
@@ -210,7 +419,7 @@ c_es_2 <- ggplot(SiteVar, aes(x = size_z_scored, y = propintraspecific_C,  group
   theme_classic()
 c_es_2
 
-c_es_3 <- ggplot(SiteVar, aes(x = size_z_scored, y = propintraspecific_C,  group = Ecosystem_Type, color = Ecosystem_Type)) +
+c_es_3 <- ggplot(SiteVar, aes(x = size_z_scored, y = propintraspecific_C,  group = waterbody_type, color = waterbody_type)) +
   geom_point() +
   geom_smooth(method= "lm") +
   theme_classic()
@@ -222,15 +431,16 @@ n_es_1 <- ggplot(SiteVar, aes(x = size_z_scored, y = propintraspecific_N)) +
   geom_smooth(method= "lm") +
   theme_classic()
 
-n_es_2 <- ggplot(SiteVar_es, aes(x = size_z_scored, y = propintraspecific_N,  group = Climate_zone_e2, color = Climate_zone_e2)) +
+n_es_2 <- ggplot(SiteVar, aes(x = size_z_scored, y = propintraspecific_N,  group = Climate_zone_e2, color = Climate_zone_e2)) +
   geom_point() +
   geom_smooth(method= "lm") +
   theme_classic()
 
-n_es_3 <- ggplot(SiteVar_es, aes(x = size_z_scored, y = propintraspecific_N,  group = Ecosystem_Type, color = Ecosystem_Type)) +
+n_es_3 <- ggplot(SiteVar, aes(x = size_z_scored, y = propintraspecific_N,  group = waterbody_type, color = waterbody_type)) +
   geom_point() +
   geom_smooth(method= "lm") +
   theme_classic()
+
 
 ggarrange(n_es_1, n_es_2, n_es_3, nrow = 3, ncol = 1)
 ggarrange(c_es_1, c_es_2, c_es_3, nrow = 3, ncol = 1)
@@ -239,6 +449,9 @@ ggarrange(c_es_1, c_es_2, c_es_3, nrow = 3, ncol = 1)
 C_climate <- aov(propintraspecific_C ~ Climate_zone_e2, data = SiteVar)
 summary(C_climate)
 TukeyHSD(C_climate)
+
+SiteVar$Climate_zone_e2 <- ordered(SiteVar$Climate_zone_e2, levels = 
+                                     c("Cold and wet/mesic", "Cool and moist", "Cool temperate and dry/xeric", "Warm temperate", "Hot and moist", "Hot and dry"))
 ggplot(SiteVar, aes(x = Climate_zone_e2, y = propintraspecific_C)) +
   geom_boxplot()+
   theme_classic() +
@@ -254,18 +467,18 @@ ggplot(SiteVar, aes(x = Climate_zone_e2, y = propintraspecific_N)) +
 
 
 ##ecosystem type - lentic / lotic
-C_type <- aov(propintraspecific_C ~ Ecosystem_Type, data = SiteVar)
+C_type <- aov(propintraspecific_C ~ waterbody_type, data = SiteVar)
 summary(C_type)
 TukeyHSD(C_type)
-ggplot(SiteVar, aes(x = Ecosystem_Type, y = propintraspecific_C)) +
+ggplot(SiteVar, aes(x = waterbody_type, y = propintraspecific_C)) +
   geom_boxplot()+
   theme_classic() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-N_type <- aov(propintraspecific_N ~ Ecosystem_Type, data = SiteVar)
+N_type <- aov(propintraspecific_N ~ waterbody_type, data = SiteVar)
 summary(N_type)
 TukeyHSD(N_type)
-ggplot(SiteVar, aes(x = Ecosystem_Type, y = propintraspecific_N)) +
+ggplot(SiteVar, aes(x = waterbody_type, y = propintraspecific_N)) +
   geom_boxplot()+
   theme_classic() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
@@ -279,7 +492,7 @@ options(na.action = "na.fail")
 ##CARBON -----------------
 ##Multiple Linear Model 
 ##full model
-lm_full_C <- lm(propintraspecific_C ~ TP + Ecosystem_Type + Size + Climate_zone_e2 + hydro_dis_z_scored + hft, data = SiteVar_2)
+lm_full_C <- lm(propintraspecific_C ~ TP + waterbody_type + Size + Climate_zone_e2 + hydro_dis_z_scored + hft, data = SiteVar)
 summary(lm_full_C)
 
 lm_function_C <- function(x) {
@@ -287,7 +500,7 @@ lm_function_C <- function(x) {
   
   ##full model
   lm_full_C_int <- lm(
-    propintraspecific_C ~ (TP + Ecosystem_Type + size_z_scored + Climate_zone_e2 + hydro_dis_z_scored + hft)^2,
+    propintraspecific_C ~ (TP + waterbody_type + size_z_scored + Climate_zone_e2 + hydro_dis_z_scored + hft)^2,
     data = df
   )
   
@@ -338,7 +551,7 @@ lmer_function_C <- function(x) {
   ##full model
   lmer_full_C_int <- lmer(
     propintraspecific_C ~
-      (TP + Ecosystem_Type + size_z_scored + Climate_zone_e2 + hydro_dis_z_scored + hft)^2 +
+      (TP + waterbody_type + size_z_scored + Climate_zone_e2 + hydro_dis_z_scored + hft)^2 +
       (1 | site_nbspe),
     data = df,
     REML = FALSE
@@ -388,7 +601,7 @@ saveRDS(C_iv_lmer, file = "outputs/C_iv_lmer.rds")
 
 ##NITROGEN -----------------
 
-lm_full_N <- lm(propintraspecific_N ~ TP + Ecosystem_Type + Size + Climate_zone_e2 + hydro_dis_z_scored + hft, data = SiteVar_2)
+lm_full_N <- lm(propintraspecific_N ~ TP + waterbody_type + Size + Climate_zone_e2 + hydro_dis_z_scored + hft, data = SiteVar_2)
 summary(lm_full_N)
 
 lm_function_N <- function(x) {
@@ -396,7 +609,7 @@ lm_function_N <- function(x) {
   
   ##full model
   lm_full_N_int <- lm(
-    propintraspecific_N ~ (TP + Ecosystem_Type + size_z_scored + Climate_zone_e2 + hydro_dis_z_scored + hft)^2,
+    propintraspecific_N ~ (TP + waterbody_type + size_z_scored + Climate_zone_e2 + hydro_dis_z_scored + hft)^2,
     data = df
   )
   
@@ -446,7 +659,7 @@ lmer_function_N <- function(x) {
   
   lmer_full_N_int <- lmer(
     propintraspecific_N ~
-      (TP + Ecosystem_Type + size_z_scored + Climate_zone_e2 + hydro_dis_z_scored + hft)^2 +
+      (TP + waterbody_type + size_z_scored + Climate_zone_e2 + hydro_dis_z_scored + hft)^2 +
       (1 | site_nbspe),
     data = df,
     REML = FALSE
