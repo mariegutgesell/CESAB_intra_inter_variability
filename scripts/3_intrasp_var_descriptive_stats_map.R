@@ -15,7 +15,8 @@ library(cowplot)
 
 
 ##read in contribution of site level intraspecific contribution RData
-load("data/Intraspecific_contribution_perSite_Env.RData")
+load("data/Intraspecific_contribution_perSite_Env.RData") ##produced by 2_Intra_vs_Inter_21_01_26.R
+
 
 ##C:N ratio -- look for effect especially in muscle, but may not be available 
 
@@ -81,11 +82,11 @@ if (length(na_idx) > 0) {
 }
 
 test <- sites_geo %>%
-  select(collection_site_id, Ecosystem_Type, country, continent, propintraspecific_N, propintraspecific_C) %>%
+  select(collection_site_id, waterbody_type, country, continent, propintraspecific_N, propintraspecific_C) %>%
   filter(is.na(continent))
 
 sites_geo <- sites_geo %>%
-  select(collection_site_id, Ecosystem_Type, country, continent, propintraspecific_N, propintraspecific_C) %>%
+  select(collection_site_id, waterbody_type, country, continent, propintraspecific_N, propintraspecific_C) %>%
   pivot_longer(cols= c(propintraspecific_N, propintraspecific_C), names_to = "prop_intraspecific_var_type", values_to = "prop_intraspecific_var") %>%
   mutate(prop_type = case_when(
     startsWith("propintraspecific_N", prop_intraspecific_var_type) ~ "N",
@@ -97,7 +98,7 @@ sites_geo <- sites_geo %>%
 #color1 <- c("darkred", "darkcyan")
 color1 <- c("white", "darkgrey")
 violin_c_n <- sites_geo  %>%
-  ggplot(aes(x = Ecosystem_Type, y = prop_intraspecific_var,  fill = prop_type)) +
+  ggplot(aes(x = waterbody_type, y = prop_intraspecific_var,  fill = prop_type)) +
   geom_violin() +
   scale_fill_manual(values = color1)+
   theme_classic() +
@@ -117,7 +118,7 @@ violin_c_n_2 <- sites_geo %>%
 violin_c_n_2
 
 box_c_n <- sites_geo %>%
-  ggplot(aes(x = prop_type, y = prop_intraspecific_var, fill = Ecosystem_Type)) +
+  ggplot(aes(x = prop_type, y = prop_intraspecific_var, fill = waterbody_type)) +
   geom_boxplot() +
   scale_fill_manual(values = color1)+
   theme_classic() +
@@ -267,7 +268,7 @@ positions <- tibble::tribble(
   "Europe",          0.35, 0.61, 0.14, 0.18,
   "Africa",          0.41, 0.33, 0.14, 0.18,
   "Asia",            0.63, 0.53, 0.14, 0.18,
-  "Oceania",         0.75, 0.26, 0.14, 0.18
+  "Oceania",         0.70, 0.26, 0.14, 0.18
 )
 
 p_final <- ggdraw(p_map)
