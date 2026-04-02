@@ -53,17 +53,17 @@ col_pal<-c("darkgrey","deepskyblue1","deepskyblue2","deepskyblue3","darkolivegre
 
 ## import/load datasets and prep them---------
 #load("../data/Env.RData") 
-load("data/Env.RData") 
+load("data/Env_27Mar26.RData") 
 
 ##plot out on map
-Env_sf <-  st_as_sf(Env,
+Env_sf <-  st_as_sf(Env_27Mar26,
   coords = c("Latitude",
              "Longitude"),
   crs = 4326,
   remove = FALSE
 )
 mapview(Env_sf)
-#Load main packages------------
+
 
 
 #Load data and "normalize" d13C and d15N per site for same "baseline"
@@ -71,15 +71,20 @@ mapview(Env_sf)
 ##per site: d15N_i=(d15N_i - d15N_min)/(d15N_max-d15N_min)
 
 #ALLindiv_June2025 <- read_excel("../data/ALLindiv_June2025.xlsx")
-ALLindiv_June2025 <- read_excel("data/ALLindiv_June2025.xlsx")
-
-
+#ALLindiv_June2025 <- read_excel("data/ALLindiv_June2025.xlsx")
 ##ALLindiv_June2025 <- read_excel("ALLindiv_January2026.xlsx")
 
-##clean data
-DataFish<-subset(ALLindiv_June2025,!is.na(d15N) & !is.na(d13C) & organism_type=="fish" & !is.na(scientific_name))
+df_all <- read_excel("data/FINAL_ALLindiv_February2026.xlsx") 
 
-DataFish$sp_site<-paste(DataFish$Scientific.nameFishBase,DataFish$collection_site_id,sep="_")
+
+
+##clean data
+##select only fish, where have C/N data and associated scientific name
+DataFish<-subset(df_all,!is.na(d15N) & !is.na(d13C) & organism_type=="fish" & !is.na(scientific_name))
+
+##add species-site identifier column
+DataFish$sp_site<-paste(DataFish$fish_species,DataFish$collection_site_id,sep="_")
+##Assign 1 - number of fish
 DataFish$num<-1
 
 ##normalise data
@@ -93,18 +98,20 @@ DataFish<-DataFish %>%
 #some species have var = NA when only one individual sampled
 #we ignore such species in average intra var but still include it in inter var
 colnames(DataFish)
-levels(DataFish$Diet)
+#levels(DataFish$Diet)
 
 SpVar<-DataFish %>% 
-  group_by(sp_site,collection_site_id,Scientific.nameFishBase,Fish.family,Ecosystem_Type,lentic_ecosystem_size_km2,lotic_ecosystem_width_m, collection_decimal_longitude, collection_decimal_latitude) %>% 
+  group_by(sp_site,collection_site_id,fish_species,fish_family,
+           waterbody_type, ecosystem_area_km2, ecosystem_width_m, 
+           collection_decimal_longitude, collection_decimal_latitude) %>% 
   summarise(sp_site_mean_N = mean(d15N_norm, na.rm = TRUE),
             sp_site_var_N = var(d15N_norm, na.rm = TRUE),
             sp_site_mean_C = mean(d13C_norm, na.rm = TRUE),
             sp_site_var_C = var(d13C_norm, na.rm = TRUE),
-            sp_site_mean_length = mean(collected_sample_total_length, na.rm = TRUE),
-            sp_site_var_length = var(collected_sample_total_length, na.rm = TRUE),
-          #  collection_decimal_longitude = mean(collection_decimal_longitude, na.rm = TRUE),
-          #  collection_decimal_latitude = mean(collection_decimal_latitude, na.rm = TRUE),
+            sp_site_mean_length = mean(collected_sample_length_mm, na.rm = TRUE), ##do we want to only use fork or total length? or group by this? 
+            sp_site_var_length = var(collected_sample_length_mm, na.rm = TRUE),
+            collection_decimal_longitude = mean(collection_decimal_longitude, na.rm = TRUE),
+            collection_decimal_latitude = mean(collection_decimal_latitude, na.rm = TRUE),
             sp_site_num_ind = sum(num))
 
 SpVar$VarTot<-SpVar$sp_site_var_N+SpVar$sp_site_var_C
@@ -147,7 +154,7 @@ mapview(SpVar_sf)
 #-----------------------------------------------------------
 # 3. Ensure Env uses same CRS
 #-----------------------------------------------------------
-Env_sf <- st_transform(Env, 4326)
+Env_sf <- st_transform(Env_27Mar26, 4326)
 mapview(Env_sf)
 #-----------------------------------------------------------
 # 4. Spatial join (nearest environmental site)
@@ -201,7 +208,7 @@ SpVar_env <- SpVar_env_sf %>%
 
 
 colnames(SpVar_env)
-p1bis<-ggplot(SpVar_env,aes(x=Fish.family,y=sp_site_var_N,col=Ecosystem_Type))+geom_point(alpha=0.5) +
+p1bis<-ggplot(SpVar_env,aes(x=fish_family,y=sp_site_var_N,col=waterbody_type))+geom_point(alpha=0.5) +
   theme_bw()+ 
   geom_smooth()+xlab("abs latitude")+ylab("specioes intraspecific variance")
 p1bis
@@ -215,11 +222,11 @@ SpVar_env$num<-1
 SiteVar <- SpVar_env %>%
   group_by(
     collection_site_id,
-    Ecosystem_Type,
+    waterbody_type,
    collection_decimal_latitude,
-  collection_decimal_longitude
-    #lentic_ecosystem_size_km2, 
-    #lotic_ecosystem_width_m
+  collection_decimal_longitude,
+  ecosystem_area_km2, 
+  ecosystem_width_m
   ) %>%
   summarise(
     
@@ -234,8 +241,8 @@ SiteVar <- SpVar_env %>%
     
     site_nbspe = sum(num, na.rm = TRUE),
     
-  # collection_decimal_longitude = mean(collection_decimal_longitude, na.rm = TRUE),
-  #  collection_decimal_latitude  = mean(collection_decimal_latitude,  na.rm = TRUE),
+   collection_decimal_longitude = mean(collection_decimal_longitude, na.rm = TRUE),
+    collection_decimal_latitude  = mean(collection_decimal_latitude,  na.rm = TRUE),
     
     site_mean_sample_id = mean(sp_site_num_ind, na.rm = TRUE),
     site_min_sample_id  = min(sp_site_num_ind,  na.rm = TRUE),
@@ -251,7 +258,7 @@ SiteVar <- SpVar_env %>%
     Longitude          = first(Longitude),
     Size               = first(Size),
     dis_r_sv           = first(dis_r_sv),
-    npp_mean           = first(npp_mean),
+    #npp_mean           = first(npp_mean),
     TP                 = first(TP),
     TN                 = first(TN),
     Distance_km        = first(Distance_km),
@@ -264,7 +271,7 @@ SiteVar <- SpVar_env %>%
     upstr              = first(upstr),
     regul              = first(regul),
     pop_den            = first(pop_den),
-    npp_class          = first(npp_class),
+  #  npp_class          = first(npp_class),
     size_class         = first(size_class),
     size_z_scored      = first(size_z_scored),
     hydro_dis_z_scored = first(hydro_dis_z_scored),
@@ -286,18 +293,7 @@ test2 <- st_as_sf(SiteVar, coords = c("collection_decimal_longitude", "collectio
 mapview(test2)
 
 
-#SiteVar <-SiteVar %>% 
-#  group_by(collection_site_id,Ecosystem_Type,lentic_ecosystem_size_km2,lotic_ecosystem_width_m, Climate_zone, Size, dis_r_sv, Distance_km, npp_mean, TP, TN, temp, hft, prec, pop, crp, urb, upstr, regul, pop_den, npp_class, size_class, size_z_scored, hydro_dis_z_scored, TP_class, Climate_zone_e, Climate_zone_e2, distance_to_env_m, match_flag) %>% 
-#  summarise(site_interspe_var_N = var(sp_site_mean_N, na.rm = TRUE),
-#            site_intraspe_var_N = mean(sp_site_var_N,na.rm=TRUE),
-#            site_interspe_var_C = var(sp_site_mean_C, na.rm = TRUE),
-#            site_intraspe_var_C = mean(sp_site_var_C,na.rm=TRUE),
-#            site_nbspe = sum(num),
-#            collection_decimal_longitude = mean(collection_decimal_longitude, na.rm = TRUE),
-#            collection_decimal_latitude = mean(collection_decimal_latitude, na.rm = TRUE),
-#            site_mean_sample_id = mean(sp_site_num,na.rm=TRUE),
-#            site_min_sample_id = min(sp_site_num,na.rm=TRUE))
-
+##Calculate proportion of intraspecific variation from C and N variance
 SiteVar$propintraspecific_N<-SiteVar$site_intraspe_var_N/(SiteVar$site_interspe_var_N+SiteVar$site_intraspe_var_N)
 SiteVar$propintraspecific_C<-SiteVar$site_intraspe_var_C/(SiteVar$site_interspe_var_C+SiteVar$site_intraspe_var_C)
 SiteVar$propintraspecific_Total<-(SiteVar$site_intraspe_var_N+SiteVar$site_intraspe_var_C)/(SiteVar$site_interspe_var_N+SiteVar$site_intraspe_var_N+SiteVar$site_interspe_var_C+SiteVar$site_intraspe_var_C)
