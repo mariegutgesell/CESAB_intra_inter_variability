@@ -30,55 +30,42 @@ load("data/Intraspecific_contribution_perSite_Env.RData") ##produced by 2_Intra_
 ##3) Between species -- drivers of dufferences in intraspecific variability between species -- trait drivers, community level drivers 
 ##potentially using site as a random effect 
 
+##Looking at decomposition of total community variance - into between-species variance and within species variance
+##total community variance = site_intraspe_var + site_intersp_var 
+##total within species var = site_intraspe_var (mean within species variation across all species at the site)
+##total between species var = site_interspe_var ( variation in mean dN between species at the site)
 
-##plotting distributions
-hist_N_intra <- ggplot(SiteVar, aes(x = propintraspecific_N)) +
-  geom_histogram() +
-  theme_classic() 
-hist_N_intra
+##then we effectively calculated the proportion of variation that is attributed to intraspecific variation - this is how much of the entire isotopic variability within a food web was associated with intraspecific variability 
+#SiteVar$propintraspecific_N<-SiteVar$site_intraspe_var_N/(SiteVar$site_interspe_var_N+SiteVar$site_intraspe_var_N)
+#SiteVar$propintraspecific_C<-SiteVar$site_intraspe_var_C/(SiteVar$site_interspe_var_C+SiteVar$site_intraspe_var_C)
+#SiteVar$propintraspecific_Total<-(SiteVar$site_intraspe_var_N+SiteVar$site_intraspe_var_C)/(SiteVar$site_interspe_var_N+SiteVar$site_intraspe_var_N+SiteVar$site_interspe_var_C+SiteVar$site_intraspe_var_C)
+##these are already calculated, just keeping here for formulas
 
-hist_C_intra <- ggplot(SiteVar, aes(x = propintraspecific_C)) +
-  geom_histogram() +
-  theme_classic()
-hist_C_intra
 
-##test 
-##getting country names and continents for each site
+###1) Create map of sites and generate boxplots that visualize % of total variance that comes from intraspecific variation in both C and N ----
+#convert points to sf objects and make base world map
+sites_coord <- st_as_sf(SiteVar, coords = c("collection_decimal_longitude", "collection_decimal_latitude"), crs = 4326)  %>%
+  st_make_valid() %>%
+  st_transform(4326)
+
 countries <- ne_countries(scale = "medium", returnclass = "sf") %>%
-  st_make_valid() %>%
+ # st_make_valid() %>%
   st_transform(4326)
 
-sites <- st_as_sf(
-  SiteVar,
-  coords = c("collection_decimal_longitude", "collection_decimal_latitude"),
-  crs = 4326,
-  remove = FALSE
-)
-
-sites_sf <- sites %>%   # whatever your polygon sf object is called
-  st_make_valid() %>%
-  st_transform(4326)
-
-sites_pt <- st_point_on_surface(sites_sf)
-
-
-countries2 <- countries %>% st_transform(4326)
-sites2 <- st_make_valid(sites_sf) %>% st_transform(4326)
-sites_pt <- st_point_on_surface(sites2)
 
 sites_geo <- st_join(
-  sites_pt,
-  countries2[, c("admin","iso_a3","continent")],
+  sites_coord,
+  countries[, c("admin","iso_a3","continent")],
   join = st_intersects,
   left = TRUE
 ) %>% rename(country = admin)
 
 na_idx <- which(is.na(sites_geo$country))
 if (length(na_idx) > 0) {
-  nearest <- st_nearest_feature(sites_geo[na_idx,], countries2)
-  sites_geo$country[na_idx]   <- countries2$admin[nearest]
-  sites_geo$iso_a3[na_idx]    <- countries2$iso_a3[nearest]
-  sites_geo$continent[na_idx] <- countries2$continent[nearest]
+  nearest <- st_nearest_feature(sites_geo[na_idx,], countries)
+  sites_geo$country[na_idx]   <- countries$admin[nearest]
+  sites_geo$iso_a3[na_idx]    <- countries$iso_a3[nearest]
+  sites_geo$continent[na_idx] <- countries$continent[nearest]
 }
 
 test <- sites_geo %>%
@@ -92,6 +79,109 @@ sites_geo <- sites_geo %>%
     startsWith("propintraspecific_N", prop_intraspecific_var_type) ~ "N",
     startsWith("propintraspecific_C", prop_intraspecific_var_type) ~ "C",
   ))
+
+
+##Update projection for plotting map -- looks good
+# Robinson projection (good-looking global)
+crs_robin <- "+proj=robin"
+
+world_r <- st_transform(countries, crs_robin)
+sites_r <- st_transform(sites_coord, crs_robin)
+
+p_map <- ggplot() +
+  geom_sf(data = world_r, fill = "lightgrey", color = "darkgrey", linewidth = 0.1) +
+  geom_sf(data = sites_r, size = 1, alpha = 0.9) +
+  coord_sf(expand = FALSE) +
+  # annotation_scale(location = "bl", width_hint = 0.25) +
+  #  annotation_north_arrow(location = "bl", which_north = "true",
+  #                        style = north_arrow_fancy_orienteering) +
+  theme_void() +
+  theme(
+    # plot.margin = margin(5, 5, 5, 5),
+    legend.position = "none"
+  ) +
+  theme(plot.background = element_rect(fill = "white", color = NA))
+
+p_map
+
+##something is wrong with the lat/longs here...have some points in the middle of the ocean 
+
+#ggsave("sites_global_map.pdf", p, width = 7.0, height = 4.2, units = "in")
+#ggsave("sites_global_map.png", p, width = 7.0, height = 4.2, units = "in", dpi = 600)
+
+
+##could be cool for each continent, to have a boxplot and then put that on the map 
+make_box <- function(dat_ct, title = NULL) {
+  ggplot(dat_ct, aes(x = prop_type, y = prop_intraspecific_var, fill = prop_type)) +
+    geom_boxplot(width = 0.7, outlier.size = 0.6) +
+    labs(title = title, x = NULL, y = " % Within Species \n Variability") +
+    # theme_minimal(base_size = 9) +
+    theme_classic()+
+    theme(
+      legend.position = "none",
+      plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
+      axis.text.x = element_text(size = 8),
+      axis.text.y = element_text(size = 8),
+      axis.title.y = element_text(size = 8),
+      panel.grid.minor = element_blank(),
+      
+      ## KEY: Make both backgrounds transparent
+      panel.background = element_rect(fill = "transparent", color = NA),
+      plot.background  = element_rect(fill = "transparent", color = NA)
+    ) +
+    ylim(0,1)
+}
+
+"Relative Contribution to \nIntraspecific Variability"
+
+continents <- c("North America","South America","Europe","Africa","Asia","Oceania")
+
+boxplots <- lapply(continents, function(ct) {
+  dat_ct <- sites_geo |> st_drop_geometry() |> filter(continent == ct)
+  make_box(dat_ct)
+})
+names(boxplots) <- continents
+##try putting boxplots on the map
+positions <- tibble::tribble(
+  ~continent,        ~x,   ~y,   ~w,   ~h,
+  "North America",   0.05, 0.58, 0.14, 0.18,
+  "South America",   0.17, 0.33, 0.14, 0.18,
+  "Europe",          0.35, 0.61, 0.14, 0.18,
+  "Africa",          0.41, 0.33, 0.14, 0.18,
+  "Asia",            0.63, 0.53, 0.14, 0.18,
+  "Oceania",         0.70, 0.26, 0.14, 0.18
+)
+
+p_final <- ggdraw(p_map)
+
+for (i in seq_len(nrow(positions))) {
+  ct <- positions$continent[i]
+  p_final <- p_final +
+    draw_plot(
+      boxplots[[ct]],
+      x = positions$x[i], y = positions$y[i],
+      width = positions$w[i], height = positions$h[i]
+    )
+}
+
+p_final
+
+
+
+
+
+###Some exploratory plots to look at differences in variation contribution ----------------
+##plotting distributions
+hist_N_intra <- ggplot(SiteVar, aes(x = propintraspecific_N)) +
+  geom_histogram() +
+  theme_classic() 
+hist_N_intra
+
+hist_C_intra <- ggplot(SiteVar, aes(x = propintraspecific_C)) +
+  geom_histogram() +
+  theme_classic()
+hist_C_intra
+
 
 ##comparing variation in proportion 
 
@@ -122,7 +212,7 @@ box_c_n <- sites_geo %>%
   geom_boxplot() +
   scale_fill_manual(values = color1)+
   theme_classic() +
-  ylab("Relative Contribution to \nIntraspecific Variability") +
+  ylab("% Within Species Variability") +
   theme(axis.title.x = element_blank())
 
 box_c_n
@@ -158,48 +248,14 @@ box_c_n_bycontinent_2 <- sites_geo %>%
 
 box_c_n_bycontinent_2
 
-##could be cool for each continent, to have a boxplot and then put that on the map 
-make_box <- function(dat_ct, title = NULL) {
-  ggplot(dat_ct, aes(x = prop_type, y = prop_intraspecific_var, fill = prop_type)) +
-    geom_boxplot(width = 0.7, outlier.size = 0.6) +
-    labs(title = title, x = NULL, y = NULL) +
-   # theme_minimal(base_size = 9) +
-    theme_classic()+
-    theme(
-      legend.position = "none",
-      plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
-      axis.text.x = element_text(size = 8),
-      axis.text.y = element_text(size = 8),
-      panel.grid.minor = element_blank(),
-      
-      ## KEY: Make both backgrounds transparent
-      panel.background = element_rect(fill = "transparent", color = NA),
-      plot.background  = element_rect(fill = "transparent", color = NA)
-    ) +
-    ylim(0,1)
-}
-
-continents <- c("North America","South America","Europe","Africa","Asia","Oceania")
-
-boxplots <- lapply(continents, function(ct) {
-  dat_ct <- sites_geo |> st_drop_geometry() |> filter(continent == ct)
-  make_box(dat_ct)
-})
-names(boxplots) <- continents
-
-
-
-##save with transparent background
-#ggsave("africa.png", plot = africa, bg = "transparent")
-
 
 
 cn_correlation <- ggplot(SiteVar, aes(x = propintraspecific_C, y = propintraspecific_N)) +
   geom_point(color = "black") +
   geom_smooth(method = "lm", color = "darkred") +
   theme_classic() +
-  ylab("Relative Contribution to \nIntraspecific Variability in N") +
-  xlab("Relative Contribution to \nIntraspecific Variability in C") 
+  ylab("% Within Variability in N") +
+  xlab("% Within Variability in C") 
 
 cn_correlation
 
@@ -223,68 +279,6 @@ ggplot(SiteVar, aes(x = log(site_nbspe), y = propintraspecific_N)) +
 
 
 ##need to keep in mind that species richness may bias intrapsecific variability -- could potentially ahndle by taking residuals and then using residuals from this relationships w/ envirnmental variable s 
-
-##trying 
-##Plotting out some maps 
-
-sites_coord <- st_as_sf(SiteVar, coords = c("collection_decimal_longitude", "collection_decimal_latitude"), crs = 4326)
-mapview(sites_coord)
-
-world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
-
-# Robinson projection (good-looking global)
-crs_robin <- "+proj=robin"
-
-world_r <- st_transform(world, crs_robin)
-sites_r <- st_transform(sites_coord, crs_robin)
-
-p_map <- ggplot() +
-  geom_sf(data = world_r, fill = "lightgrey", color = "darkgrey", linewidth = 0.1) +
-  geom_sf(data = sites_r, size = 1, alpha = 0.9) +
-  coord_sf(expand = FALSE) +
- # annotation_scale(location = "bl", width_hint = 0.25) +
-#  annotation_north_arrow(location = "bl", which_north = "true",
- #                        style = north_arrow_fancy_orienteering) +
-  theme_void() +
-  theme(
-   # plot.margin = margin(5, 5, 5, 5),
-    legend.position = "none"
-  ) +
-  theme(plot.background = element_rect(fill = "white", color = NA))
-
-p_map
-
-##something is wrong with the lat/longs here...have some points in the middle of the ocean 
-
-#ggsave("sites_global_map.pdf", p, width = 7.0, height = 4.2, units = "in")
-#ggsave("sites_global_map.png", p, width = 7.0, height = 4.2, units = "in", dpi = 600)
-
-
-##try putting boxplots on the map
-positions <- tibble::tribble(
-  ~continent,        ~x,   ~y,   ~w,   ~h,
-  "North America",   0.05, 0.58, 0.14, 0.18,
-  "South America",   0.17, 0.33, 0.14, 0.18,
-  "Europe",          0.35, 0.61, 0.14, 0.18,
-  "Africa",          0.41, 0.33, 0.14, 0.18,
-  "Asia",            0.63, 0.53, 0.14, 0.18,
-  "Oceania",         0.70, 0.26, 0.14, 0.18
-)
-
-p_final <- ggdraw(p_map)
-
-for (i in seq_len(nrow(positions))) {
-  ct <- positions$continent[i]
-  p_final <- p_final +
-    draw_plot(
-      boxplots[[ct]],
-      x = positions$x[i], y = positions$y[i],
-      width = positions$w[i], height = positions$h[i]
-    )
-}
-
-p_final
-
 
 
 
