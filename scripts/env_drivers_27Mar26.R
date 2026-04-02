@@ -40,13 +40,14 @@ library(viridis)
 
 
 ##  Set the working directory to the root of the project ------
-root.dir = find_rstudio_root_file()
+#root.dir = find_rstudio_root_file()
 #root.dir =("C:/Users/asentis/INRAE/AAAprojects/Food_webs_CESAB/Intraspecific")
-data.dir = paste0(root.dir,'/data')
-script.dir = paste0(root.dir,'/scripts')
-figures.dir = paste0(root.dir,'/figures')
+#data.dir = paste0(root.dir,'/data')
+#script.dir = paste0(root.dir,'/scripts')
+#figures.dir = paste0(root.dir,'/figures')
 
-setwd(script.dir)
+#setwd(script.dir)
+##MG update: don't need to set working directory if working within project, folder structure of project should align so allows for direct integration of code here
 
 ### choice of color palette---------
 col_pal<-c("darkgrey","deepskyblue1","deepskyblue2","deepskyblue3","darkolivegreen","darkolivegreen2","darkolivegreen3",
@@ -54,13 +55,13 @@ col_pal<-c("darkgrey","deepskyblue1","deepskyblue2","deepskyblue3","darkolivegre
 
 ## import/load datasets and prep them---------
 #EnvData_len <- read_excel("../data/FOODWEBS_Individual_EnvironmentalData_28Aug25.xlsx",sheet = "Lentic")
-EnvData_len <- read_excel("../data/FOODWEBS_Individual_EnvironmentalData_23Mar26.xlsx",sheet = "Lentic environment")
+EnvData_len <- read_excel("data/FOODWEBS_Individual_EnvironmentalData_23Mar26.xlsx",sheet = "Lentic environment")
 ##nutrient data
-df_all <- read_excel("../data/FINAL_ALLindiv_February2026.xlsx")  
+df_all <- read_excel("data/FINAL_ALLindiv_February2026.xlsx")  
 str(df_all) ##issues with a lot of variables as character instead of numeric.
 colnames(df_all)
 
-##keep only Fodd web id and longitude and latitude
+##keep only Food web id and longitude and latitude
 df_clean <- df_all %>%
   group_by(FWB_id) %>%
   summarise(
@@ -74,7 +75,7 @@ EnvData_len <- EnvData_len %>%
 
 
 #load nutrient data
-NutData <- read.csv("../data/Global_Nutrient_Data.csv")
+NutData <- read.csv("data/Global_Nutrient_Data.csv")
 str(NutData)
 
 ##to add the nutrient data from the nearest location
@@ -126,7 +127,7 @@ EnvData_len_nut$Distance_km <- as.numeric(
 
 ##lotic systems
 #EnvData_lot <- read_excel("../data/FOODWEBS_Individual_EnvironmentalData_28Aug25.xlsx",sheet = "Lotic")
-EnvData_lot <- read_excel("../data/FOODWEBS_Individual_EnvironmentalData_23Mar26.xlsx",sheet = "Lotic environment")
+EnvData_lot <- read_excel("data/FOODWEBS_Individual_EnvironmentalData_23Mar26.xlsx",sheet = "Lotic environment")
 colnames(EnvData_lot)
 
 ##add longitude and latitude to EnvData
@@ -167,8 +168,8 @@ EnvData_lot_nut$Distance_km <- as.numeric(
   )
 ) / 1000
 
-save(EnvData_len_nut, file = "../data/EnvData_len_nut_March26.RData")
-save(EnvData_lot_nut, file = "../data/EnvData_lot_nut_March26.RData")
+save(EnvData_len_nut, file = "data/EnvData_len_nut_March26.RData")
+save(EnvData_lot_nut, file = "data/EnvData_lot_nut_March26.RData")
 
 
 
@@ -177,9 +178,11 @@ save(EnvData_lot_nut, file = "../data/EnvData_lot_nut_March26.RData")
 # load("../data/EnvData_lot_nut_March26.RData") 
 EnvData_lot_nut$ria_ha_csu
 
+#compute flow variability
 EnvData_lot_nut$dis_r_sv=(EnvData_lot_nut$dis_m3_pmx - EnvData_lot_nut$dis_m3_pmn)/(0.001*EnvData_lot_nut$riv_tc_csu)
 
 colnames(EnvData_lot_nut)
+##Conduct transformations - e.g, log transform, standardize - for lotic environment
 Env_river_b<-EnvData_lot_nut %>% 
   dplyr::select ('Food web_ID'=FWB_id,
                  #Region,
@@ -228,11 +231,13 @@ Env_river_b<-EnvData_lot_nut %>%
     TP>median(TP,na.rm=TRUE) ~ "high_prod"))
 mean(Env_river_b$Size)
 Env_river_b$size_z_scored
+
 ##lentic system
 #flow variability
 #compute flow variability
 EnvData_len_nut$dis_r_sv=(EnvData_len_nut$dis_m3_pmx - EnvData_len_nut$dis_m3_pmn)/(EnvData_len_nut$Vol_total)
 
+##Conduct transformations - e.g, log transform, standardize - for lentic environment
 Env_lake_b<-EnvData_len_nut %>% dplyr::select (
   'Food web_ID'=FWB_id,
   #Region,
@@ -276,7 +281,10 @@ Env_lake_b<-EnvData_len_nut %>% dplyr::select (
     TP<median(TP,na.rm=TRUE) ~ "low_prod",
     TP>median(TP,na.rm=TRUE) ~ "high_prod"))
 
+##Join lentic and lotic together
 Env<-rbind(Env_lake_b,Env_river_b)
+
+##Add climate zone_e
 Env_27Mar26<-Env %>% 
   mutate(Climate_zone_e=as.character(as.factor(Climate_zone))) %>%
   mutate(Climate_zone_e = fct_recode(Climate_zone_e,
@@ -310,18 +318,24 @@ Env_27Mar26<-Env %>%
                                       "Hot and dry"="Extremely hot and xeric",
                                       "Hot and moist"="Extremely hot and moist"))  
 
+## I think the warning that comes up means there are no sites in Hot and Arid climate - I think okay? 
 
 
 
-
-
+##Save joined environmental data 
 #save(Env_river_b,file = "Env_river_b.RData")
 #save(Env_lake_b,file = "Env_lake_b.RData")
-save(Env_27Mar26,file = "../data/Env_27Mar26.RData")
-
-load("../data/Env_27Mar26.RData")
+save(Env_27Mar26,file = "data/Env_27Mar26.RData")
 
 
+
+
+##Plotting to exploring data  ------------------------
+load("data/Env_27Mar26.RData")
+
+
+
+##Plotting 
 
 ggplot(Env, aes(x = TP, y = Distance_km)) +
   geom_point(alpha = 0.6) +
