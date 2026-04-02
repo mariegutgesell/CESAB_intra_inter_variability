@@ -233,13 +233,13 @@ SiteVar <- SpVar_env %>%
     # ----------------------------
     # Fish community statistics
     # ----------------------------
-    site_interspe_var_N = var(sp_site_mean_N, na.rm = TRUE),
-    site_intraspe_var_N = mean(sp_site_var_N, na.rm = TRUE),
+    site_interspe_var_N = var(sp_site_mean_N, na.rm = TRUE), ##site level interspecific variation: variation in mean dN between species
+    site_intraspe_var_N = mean(sp_site_var_N, na.rm = TRUE), ##site level intraspecific variation: mean within species variation across all species at the site
     
     site_interspe_var_C = var(sp_site_mean_C, na.rm = TRUE),
     site_intraspe_var_C = mean(sp_site_var_C, na.rm = TRUE),
     
-    site_nbspe = sum(num, na.rm = TRUE),
+    site_nbspe = sum(num, na.rm = TRUE), ##species richness
     
    collection_decimal_longitude = mean(collection_decimal_longitude, na.rm = TRUE),
     collection_decimal_latitude  = mean(collection_decimal_latitude,  na.rm = TRUE),
