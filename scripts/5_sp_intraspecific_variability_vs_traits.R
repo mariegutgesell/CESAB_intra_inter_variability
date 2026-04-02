@@ -15,3 +15,4 @@ sp_var_mean <- SpVar_env %>%
 
 ##then you would want to join this to trait data 
 
+write.csv(sp_var_mean, "data/mean_species_intravar_contribution.csv")
