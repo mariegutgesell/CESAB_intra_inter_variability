@@ -267,6 +267,7 @@ plot_1 <- ggarrange(box_c_n_2, cn_correlation, legend = "none", nrow = 1, ncol =
 plot_1
 
 
+##Variation in proportion contribution by species richness
 ggplot(SiteVar, aes(x = log(site_nbspe), y = propintraspecific_C)) +
   geom_point() +
   geom_smooth(method = "lm")
@@ -276,7 +277,75 @@ ggplot(SiteVar, aes(x = log(site_nbspe), y = propintraspecific_N)) +
   geom_smooth(method = "lm")
 
 
+##Variation in proportion contribution by mean and min sample size
+SiteVar %>%
+  filter(site_min_sample_id >= 2 & site_min_sample_id <= 100) %>%
+ggplot(aes(x = log(site_mean_sample_id), y = propintraspecific_C)) +
+  geom_point() +
+  geom_smooth(method = "lm")
 
+ggplot(SiteVar, aes(x = log(site_mean_sample_id), y = propintraspecific_N)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+ggplot(SiteVar, aes(x = site_min_sample_id)) +
+  geom_histogram(binwidth = 1)
+
+ggplot(SiteVar, aes(x = site_mean_sample_id)) +
+  geom_histogram(binwidth = 1)
+
+ggplot(SiteVar, aes(x = site_nbspe)) +
+  geom_histogram(binwidth = 1)
+
+##Look at individual species x site level
+load("data/SpeciesIntraspecific_variance_perSite_Env.RData")
+SpVar_env %>%
+  filter(sp_site_num_ind >5) %>%
+  ggplot(aes(x = log(sp_site_num_ind), y = sp_site_var_C)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+ggplot(SpVar_env, aes(x = log(sp_site_num_ind), y = sp_site_var_N)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+##mean d13C/d15N - normalized d15N and d13C
+
+
+SpVar_env %>%
+ # filter(sp_site_num_ind >5) %>%
+  ggplot(aes(x = log(sp_site_num_ind), y = sp_site_mean_C)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+ggplot(SpVar_env, aes(x = log(sp_site_num_ind), y = sp_site_mean_N)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+
+##Looking at mean / sd of raw isotope values
+df_all <- read_excel("data/FINAL_ALLindiv_February2026.xlsx") 
+
+
+
+##clean data
+##select only fish, where have C/N data and associated scientific name
+DataFish<-subset(df_all,!is.na(d15N) & !is.na(d13C) & organism_type=="fish" & !is.na(scientific_name))
+
+##add species-site identifier column
+DataFish$sp_site<-paste(DataFish$fish_species,DataFish$collection_site_id,sep="_")
+##Assign 1 - number of fish
+DataFish$num<-1
+
+##normalise data
+DataFish<-DataFish %>% 
+  group_by(collection_site_id) %>% 
+  mutate(d15N_norm = (d15N - min(d15N, na.rm = TRUE))/(max(d15N, na.rm = TRUE)-min(d15N, na.rm = TRUE)),
+         d13C_norm = (d13C - min(d13C, na.rm = TRUE))/(max(d13C, na.rm = TRUE)-min(d13C, na.rm = TRUE)))
+
+
+
+##if we remove small sample size, when does slope become 0? 
 
 ##need to keep in mind that species richness may bias intrapsecific variability -- could potentially ahndle by taking residuals and then using residuals from this relationships w/ envirnmental variable s 
 

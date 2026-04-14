@@ -98,7 +98,9 @@ DataFish<-DataFish %>%
 #some species have var = NA when only one individual sampled
 #we ignore such species in average intra var but still include it in inter var
 colnames(DataFish)
+str(DataFish)
 #levels(DataFish$Diet)
+DataFish$collected_sample_length_mm <- as.numeric(DataFish$collected_sample_length_mm)
 
 SpVar<-DataFish %>% 
   group_by(sp_site,collection_site_id,fish_species,fish_family,
@@ -112,7 +114,7 @@ SpVar<-DataFish %>%
             sp_site_var_length = var(collected_sample_length_mm, na.rm = TRUE),
             collection_decimal_longitude = mean(collection_decimal_longitude, na.rm = TRUE),
             collection_decimal_latitude = mean(collection_decimal_latitude, na.rm = TRUE),
-            sp_site_num_ind = sum(num))
+            sp_site_num_ind = sum(num)) ##number of samples per species
 
 SpVar$VarTot<-SpVar$sp_site_var_N+SpVar$sp_site_var_C
 colnames(SpVar)
@@ -244,8 +246,8 @@ SiteVar <- SpVar_env %>%
    collection_decimal_longitude = mean(collection_decimal_longitude, na.rm = TRUE),
     collection_decimal_latitude  = mean(collection_decimal_latitude,  na.rm = TRUE),
     
-    site_mean_sample_id = mean(sp_site_num_ind, na.rm = TRUE),
-    site_min_sample_id  = min(sp_site_num_ind,  na.rm = TRUE),
+    site_mean_sample_id = mean(sp_site_num_ind, na.rm = TRUE), ##mean number of individuals in sample
+    site_min_sample_id  = min(sp_site_num_ind,  na.rm = TRUE), ##min number of individuals in sample 
     
     # ----------------------------
     # Environmental variables
@@ -298,7 +300,8 @@ SiteVar$propintraspecific_N<-SiteVar$site_intraspe_var_N/(SiteVar$site_interspe_
 SiteVar$propintraspecific_C<-SiteVar$site_intraspe_var_C/(SiteVar$site_interspe_var_C+SiteVar$site_intraspe_var_C)
 SiteVar$propintraspecific_Total<-(SiteVar$site_intraspe_var_N+SiteVar$site_intraspe_var_C)/(SiteVar$site_interspe_var_N+SiteVar$site_intraspe_var_N+SiteVar$site_interspe_var_C+SiteVar$site_intraspe_var_C)
 
-SiteVar<-subset(SiteVar,site_nbspe>=2 & site_mean_sample_id>1)
+##keep only sites with at least 3 species, and more than 1 individual sampled per species
+#SiteVar<-subset(SiteVar,site_nbspe>=2 & site_mean_sample_id>1) 
 
 ##save
 save(SiteVar, file = "data/Intraspecific_contribution_perSite_Env.RData")
