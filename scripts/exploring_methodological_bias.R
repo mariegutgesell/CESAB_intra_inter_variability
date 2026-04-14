@@ -20,6 +20,8 @@ library(ggplot2)
 df_all <- read_excel("data/FINAL_ALLindiv_February2026.xlsx") 
 
 load("data/Intraspecific_contribution_perSite_Env.RData") ##produced by 2_Intra_vs_Inter_21_01_26.R
+##note: this contains data already filtered to annual only, at least 3 species per site, and more than 1 individual
+##634 sites 
 
 
 ##clean data
@@ -38,6 +40,12 @@ DataFish<-DataFish %>%
          d13C_norm = (d13C - min(d13C, na.rm = TRUE))/(max(d13C, na.rm = TRUE)-min(d13C, na.rm = TRUE)))
 
 
+##select only sites that are in the SiteVar -- 
+DataFish <- DataFish %>%
+  filter(FWB_id %in% SiteVar$FWB_id)
+
+
+###1) Within species rarefaction ------------------------------
 ##create a species-site sample sizes from individual-level data
 sp_site_counts <- DataFish %>%
   group_by(sp_site, collection_site_id, fish_species) %>%
@@ -367,7 +375,8 @@ DataFish$collected_sample_length_mm <- as.numeric(DataFish$collected_sample_leng
 
 SpVar<-DataFish %>% 
   group_by(sp_site,collection_site_id,fish_species,fish_family,
-           waterbody_type, ecosystem_area_km2, ecosystem_width_m, 
+           waterbody_type, 
+           #ecosystem_area_km2, ecosystem_width_m, 
            collection_decimal_longitude, collection_decimal_latitude) %>% 
   summarise(sp_site_mean_N = mean(d15N_norm, na.rm = TRUE),
             sp_site_var_N = var(d15N_norm, na.rm = TRUE),
@@ -389,7 +398,6 @@ SpVar_min3 <- SpVar %>%
   group_by(collection_site_id) %>%
   filter(all(sp_site_num_ind >= 3)) ##change this to only filter sites where ALL species have at least 3 individuals ... 
 
-
 test <- SpVar_min3 %>%
   ungroup() %>%
   select(waterbody_type, collection_site_id) %>%
@@ -397,6 +405,7 @@ test <- SpVar_min3 %>%
   group_by(waterbody_type) %>%
   count()
 ##this does still give us 382 food webs 
+##with removing temporal unknowns, and with at least 3 species per 
 
 SpVar_min5 <- SpVar %>%
   group_by(collection_site_id) %>%
