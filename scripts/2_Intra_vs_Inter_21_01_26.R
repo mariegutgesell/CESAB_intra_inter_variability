@@ -36,7 +36,7 @@ library(sf)
 library(viridis)
 library(ggplot2)
 library(ggpubr)
-
+library(lubridate)
 
 
 ##  Set the working directory to the root of the project ------
@@ -94,6 +94,46 @@ DataFish<-DataFish %>%
           d13C_norm = (d13C - min(d13C, na.rm = TRUE))/(max(d13C, na.rm = TRUE)-min(d13C, na.rm = TRUE)))
 
 
+##Check for and remove temporal replication within site -- want to ensure only 1 year of data
+DataFish <- DataFish %>%
+ # mutate(as.Date(collection_date)) %>%
+  mutate(is_range = str_detect(collection_date, "^\\d{4}-\\d{4}$")) %>% ##indicate if sample collection date is a range of years
+  mutate(year = str_extract(collection_date, "^\\d{4}") %>% as.numeric()) ##create column of year
+
+##calculate the number of sampling years
+site_num_sampling_years <- DataFish %>%
+  filter(is_range == FALSE) %>% ##remove any sites that only had collection date listed as year ranges 
+  select(FWB_id, collection_site_id, year) %>%
+  unique() %>%
+  group_by(FWB_id, collection_site_id) %>%
+  count()
+
+##2 ways we could do this, 1 - only keep sites with 1 year of sampling, or 2, when have annual resolution, treat them as "unique" i.e., calculate metrics at that level and account for this in model
+annual_site_list <- DataFish %>%
+  filter(is_range == FALSE) %>% ##remove any sites that only had collection date listed as year ranges 
+  select(FWB_id, collection_site_id, year) %>%
+  unique() %>%
+  filter(!is.na(year)) %>% ##remove NA if want to reduce any ambiguity
+  group_by(FWB_id, collection_site_id) %>%
+  count() %>%
+  filter(n == 1)
+##755 sites with only 1 year of data, or where collection date was NA 
+##728 sites if we also remove those that are NA 
+
+##list where keep all (other than range) to use to calculate at intrasp. var metrics at level of sitexyear combo
+annual_site_list_2 <- DataFish %>%
+  filter(is_range == FALSE) %>% ##remove any sites that only had collection date listed as year ranges 
+  mutate(FWB_id_year = str_c(FWB_id, year, sep = "_")) %>%
+  select(FWB_id_year, collection_site_id, year) %>%
+  unique() %>%
+  group_by(FWB_id_year, collection_site_id) %>%
+  count()
+
+
+##For now, lets go with more conservative estimate, but can discuss this at the next meeting, and will be easy enough to update
+DataFish <- DataFish %>%
+  filter(FWB_id %in% annual_site_list$FWB_id)
+
 #I. Intraspecific variation per species------------
 #some species have var = NA when only one individual sampled
 #we ignore such species in average intra var but still include it in inter var
@@ -103,8 +143,9 @@ str(DataFish)
 DataFish$collected_sample_length_mm <- as.numeric(DataFish$collected_sample_length_mm)
 
 SpVar<-DataFish %>% 
-  group_by(sp_site,collection_site_id,fish_species,fish_family,
-           waterbody_type, ecosystem_area_km2, ecosystem_width_m, 
+  group_by(FWB_id, sp_site,collection_site_id,fish_species,fish_family,
+           waterbody_type, 
+           #ecosystem_area_km2, ecosystem_width_m,  ##for 3 FWB_id there are two sizes, so i dont think we want to group by this .. not consistent across site
            collection_decimal_longitude, collection_decimal_latitude) %>% 
   summarise(sp_site_mean_N = mean(d15N_norm, na.rm = TRUE),
             sp_site_var_N = var(d15N_norm, na.rm = TRUE),
@@ -122,6 +163,11 @@ SpVar$collection_decimal_longitude
 library(sf)
 library(dplyr)
 
+
+test <- SpVar %>%
+  select(collection_site_id) %>%
+  group_by(collection_site_id) %>%
+  count()
 
 ############################################################
 # Spatial join between fish site data and environmental data
@@ -223,12 +269,13 @@ SpVar_env$num<-1
 
 SiteVar <- SpVar_env %>%
   group_by(
+    FWB_id,
     collection_site_id,
     waterbody_type,
    collection_decimal_latitude,
   collection_decimal_longitude,
-  ecosystem_area_km2, 
-  ecosystem_width_m
+#  ecosystem_area_km2, ##for 3 FWB there are two different ecosystem sizes (see below), but since not using this i dont think then dont need to group by this here ... 
+#  ecosystem_width_m
   ) %>%
   summarise(
     
@@ -286,10 +333,14 @@ SiteVar <- SpVar_env %>%
     .groups = "drop"
   )
 
+##check for any duplicates
 test <- SiteVar %>%
-  select(collection_site_id) %>%
-  group_by(collection_site_id) %>%
+  select(FWB_id, collection_site_id, waterbody_type) %>%
+  group_by(FWB_id, collection_site_id, waterbody_type) %>%
   count()
+##FWB_0175, FWB_0215, FWB_0541 - do we know why in DataFish there are two different ecosystem_area_m or ecosystem_width_m?
+
+
 
 test2 <- st_as_sf(SiteVar, coords = c("collection_decimal_longitude", "collection_decimal_latitude"), crs = 4326, remove = FALSE)
 mapview(test2)
@@ -300,14 +351,53 @@ SiteVar$propintraspecific_N<-SiteVar$site_intraspe_var_N/(SiteVar$site_interspe_
 SiteVar$propintraspecific_C<-SiteVar$site_intraspe_var_C/(SiteVar$site_interspe_var_C+SiteVar$site_intraspe_var_C)
 SiteVar$propintraspecific_Total<-(SiteVar$site_intraspe_var_N+SiteVar$site_intraspe_var_C)/(SiteVar$site_interspe_var_N+SiteVar$site_intraspe_var_N+SiteVar$site_interspe_var_C+SiteVar$site_intraspe_var_C)
 
-##keep only sites with at least 3 species, and more than 1 individual sampled per species
-#SiteVar<-subset(SiteVar,site_nbspe>=2 & site_mean_sample_id>1) 
 
 ##save
-save(SiteVar, file = "data/Intraspecific_contribution_perSite_Env.RData")
-save(SpVar_env, file = "data/SpeciesIntraspecific_variance_perSite_Env.RData")
+#save(SiteVar, file = "data/Intraspecific_contribution_perSite_Env.RData")
+#save(SpVar_env, file = "data/SpeciesIntraspecific_variance_perSite_Env.RData")
 # write.table(SiteVar,file="../data/Intraspecific_contribution_perSite_Env.txt",row.names=FALSE,sep="\t")
 # write.table(SpVar_env,file="../data/SpeciesIntraspecific_variance_perSite_Env.txt",row.names=FALSE,sep="\t")
+
+
+##Create 3 matrices -- 
+
+
+##keep only sites with at least 3 species, and more than 1 individual sampled per species
+site_list_min1 <-subset(SiteVar,site_nbspe>=2 & site_min_sample_id>=1) 
+##648 food webs
+site_list_min3 <-subset(SiteVar,site_nbspe>=2 & site_min_sample_id>=3)
+##226 food webs
+site_list_min5 <-subset(SiteVar,site_nbspe>=2 & site_min_sample_id>=5) 
+##119 food webs
+
+##Create both site level and species level matrices 
+SiteVar_min1 <- SiteVar %>%
+  filter(FWB_id %in% site_list_min1$FWB_id)
+SpVar_min1 <- SpVar_env %>%
+  filter(FWB_id %in% site_list_min1$FWB_id)
+
+SiteVar_min3 <- SiteVar %>%
+  filter(FWB_id %in% site_list_min3$FWB_id)
+SpVar_min3 <- SpVar_env %>%
+  filter(FWB_id %in% site_list_min3$FWB_id)
+
+SiteVar_min5 <- SiteVar %>%
+  filter(FWB_id %in% site_list_min5$FWB_id)
+SpVar_min5 <- SpVar_env %>%
+  filter(FWB_id %in% site_list_min5$FWB_id)
+
+
+test <- SpVar_min5 %>%
+  select(FWB_id) %>%
+  unique()
+##save all as csvs
+
+write.csv(SiteVar_min1, "data/analysis_csvs/SiteVar_min1.csv")
+write.csv(SpVar_min1, "data/analysis_csvs/SpVar_min1.csv")
+write.csv(SiteVar_min3, "data/analysis_csvs/SiteVar_min3.csv")
+write.csv(SpVar_min3, "data/analysis_csvs/SpVar_min3.csv")
+write.csv(SiteVar_min5, "data/analysis_csvs/SiteVar_min5.csv")
+write.csv(SpVar_min5, "data/analysis_csvs/SpVar_min5.csv")
 
 
 
