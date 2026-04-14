@@ -365,10 +365,30 @@ SiteVar$propintraspecific_Total<-(SiteVar$site_intraspe_var_N+SiteVar$site_intra
 ##keep only sites with at least 3 species, and more than 1 individual sampled per species
 site_list_min1 <-subset(SiteVar,site_nbspe>=2 & site_min_sample_id>=1) 
 ##648 food webs
+ 
+test <- site_list_min1 %>%
+  select(FWB_id, waterbody_type) %>%
+  unique() %>%
+  group_by(waterbody_type) %>%
+  count()
+
+
 site_list_min3 <-subset(SiteVar,site_nbspe>=2 & site_min_sample_id>=3)
 ##226 food webs
+
+test <- site_list_min3 %>%
+  select(FWB_id, waterbody_type) %>%
+  unique() %>%
+  group_by(waterbody_type) %>%
+  count()
 site_list_min5 <-subset(SiteVar,site_nbspe>=2 & site_min_sample_id>=5) 
 ##119 food webs
+
+test <- site_list_min5 %>%
+  select(FWB_id, waterbody_type) %>%
+  unique() %>%
+  group_by(waterbody_type) %>%
+  count()
 
 ##Create both site level and species level matrices 
 SiteVar_min1 <- SiteVar %>%
