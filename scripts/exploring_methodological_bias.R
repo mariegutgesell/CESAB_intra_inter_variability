@@ -394,11 +394,11 @@ SpVar$collection_decimal_longitude
 
 
 ##How many sites do we have where the minimum sample size is less than 3 individuals? 
-SpVar_min3 <- SpVar %>%
+SpVar_min1 <- SpVar %>%
   group_by(collection_site_id) %>%
-  filter(all(sp_site_num_ind >= 3)) ##change this to only filter sites where ALL species have at least 3 individuals ... 
+  filter(all(sp_site_num_ind >= 1)) ##change this to only filter sites where ALL species have at least 3 individuals ... 
 
-test <- SpVar_min3 %>%
+test <- SpVar_min1 %>%
   ungroup() %>%
   select(waterbody_type, collection_site_id) %>%
   unique() %>%

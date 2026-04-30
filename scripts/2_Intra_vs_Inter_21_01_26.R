@@ -340,6 +340,15 @@ test <- SiteVar %>%
   count()
 ##FWB_0175, FWB_0215, FWB_0541 - do we know why in DataFish there are two different ecosystem_area_m or ecosystem_width_m?
 
+test2 <- SiteVar %>%
+  select(FWB_id, collection_site_id) %>%
+  group_by(FWB_id, collection_site_id) %>%
+  count()
+
+##FWB_0075 and FWB_0093 have both a lotic and a lentic - same gps and environmental data 
+##FWB_0075 and FWB_0093-- in environmental data, this is listed as lentic only, in fish data it has both -- likely is both? but have same lat/long, and therefore will need potentially different FWB? and different environmental data
+##Both are collected by Tim, so would be easy to sort 
+
 
 
 test2 <- st_as_sf(SiteVar, coords = c("collection_decimal_longitude", "collection_decimal_latitude"), crs = 4326, remove = FALSE)
