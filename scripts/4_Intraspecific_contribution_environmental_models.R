@@ -84,7 +84,12 @@ SiteVar_min5 <- SiteVar_min5 %>%
   mutate(data_group = "min_5")
 
 ##bind all together 
-SiteVar_all <- rbind(SiteVar_min1, SiteVar_min3, SiteVar_min5)
+SiteVar_all <- rbind(SiteVar_min1, SiteVar_min3, SiteVar_min5) %>%
+  mutate(Climate_zone_2cat = case_when(
+    startsWith(Climate_zone_e2, "Co") ~"Cold/Cool",
+    startsWith(Climate_zone_e2, "Ho") ~"Warm/Hot",
+    startsWith(Climate_zone_e2, "Wa") ~"Warm/Hot",
+  ))
 
 ##potential random effects: species richness, C:N, tissue type 
 ##Make correlation plot of numerical explanatory variables
@@ -159,7 +164,7 @@ ggplot(SiteVar_all, aes(x = TP_z_scored)) +
 #                                         "Hot and moist",
 #                                         "Hot and dry"
 #                                       ))
-ggplot(SiteVar_all, aes(x = data_group, y = TP_z_scored, fill = Climate_zone_e2)) +
+ggplot(SiteVar_all, aes(x = data_group, y = TP_z_scored, fill = Climate_zone_2cat)) +
   geom_boxplot() 
 
 ##Write function that conducts beta regressions or ANOVAs over all 3 datasets 
@@ -424,7 +429,7 @@ check_beta_collinearity <- function(dat,
                                     res,
                                     exp,
                                     richness = "site_nbspe_log_z_scored",
-                                    climate = "Climate_zone_e2") {
+                                    climate = "Climate_zone_2cat") {
   
   cor_by_group <- dat %>%
     group_by(data_group) %>%
@@ -478,7 +483,7 @@ check_beta_collinearity <- function(dat,
 
 ##3) need to have enough sites for each climate zone .. 
 site_climate_summary <- SiteVar_all %>%
-  group_by(data_group, Climate_zone_e2) %>%
+  group_by(data_group, Climate_zone_2cat) %>%
   count()
 #for min  = 5, don't have enough sites in each climate category ... so i don't think climate interactions are interpretable 
 
@@ -487,7 +492,7 @@ run_beta_models <- function(dat,
                             res,
                             exp,
                             richness = "site_nbspe_log_z_scored",
-                            climate = "Climate_zone_e2") {
+                            climate = "Climate_zone_2cat") {
   
   df <- dat %>%
     select(data_group, all_of(c(res, exp, richness, climate))) %>%
@@ -575,7 +580,7 @@ plot_beta_model_predictions <- function(selected,
                                         exp,
                                         model_name,
                                         richness = "site_nbspe_log_z_scored",
-                                        climate = "Climate_zone_e2",
+                                        climate = "Climate_zone_2cat",
                                         n_points = 100) {
   
   make_predictions <- function(d, mods, res) {
@@ -647,7 +652,7 @@ plot_beta_climate_interaction <- function(selected,
                                           exp,
                                           model_name,
                                           richness = "site_nbspe_log_z_scored",
-                                          climate = "Climate_zone_e2",
+                                          climate = "Climate_zone_2cat",
                                           n_points = 100) {
   
   make_predictions <- function(d, mods, res) {
