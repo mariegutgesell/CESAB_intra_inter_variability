@@ -15,8 +15,8 @@ library(cowplot)
 
 
 ##read in contribution of site level intraspecific contribution RData
-load("data/Intraspecific_contribution_perSite_Env.RData") ##produced by 2_Intra_vs_Inter_21_01_26.R
-
+#load("data/Intraspecific_contribution_perSite_Env.RData") ##produced by 2_Intra_vs_Inter_21_01_26.R
+SiteVar <- read.csv("data/SiteVar_3sp_75cutoff.csv")
 
 ##C:N ratio -- look for effect especially in muscle, but may not be available 
 
