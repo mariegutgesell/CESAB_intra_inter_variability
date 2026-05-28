@@ -37,8 +37,8 @@ library(viridis)
 library(ggplot2)
 library(ggpubr)
 library(lubridate)
-
-
+library(mapview)
+library(stringr)
 ##  Set the working directory to the root of the project ------
 #root.dir = find_rstudio_root_file()
 #data.dir = paste0(root.dir,'/data')
@@ -82,58 +82,27 @@ df_all <- read_excel("data/FINAL_ALLindiv_February2026.xlsx")
 ##select only fish, where have C/N data and associated scientific name
 DataFish<-subset(df_all,!is.na(d15N) & !is.na(d13C) & organism_type=="fish" & !is.na(scientific_name))
 
+
+
 ##add species-site identifier column
 DataFish$sp_site<-paste(DataFish$fish_species,DataFish$collection_site_id,sep="_")
 ##Assign 1 - number of fish
 DataFish$num<-1
 
+
 ##normalise data
 DataFish<-DataFish %>% 
-  group_by(collection_site_id) %>% 
+  mutate(year = str_extract(collection_date, "^\\d{4}") %>% as.numeric()) %>% ##create column of year
+  mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
+  group_by(site_year_code) %>% 
   mutate(d15N_norm = (d15N - min(d15N, na.rm = TRUE))/(max(d15N, na.rm = TRUE)-min(d15N, na.rm = TRUE)),
           d13C_norm = (d13C - min(d13C, na.rm = TRUE))/(max(d13C, na.rm = TRUE)-min(d13C, na.rm = TRUE)))
 
 
-##Check for and remove temporal replication within site -- want to ensure only 1 year of data
-DataFish <- DataFish %>%
- # mutate(as.Date(collection_date)) %>%
-  mutate(is_range = str_detect(collection_date, "^\\d{4}-\\d{4}$")) %>% ##indicate if sample collection date is a range of years
-  mutate(year = str_extract(collection_date, "^\\d{4}") %>% as.numeric()) ##create column of year
-
-##calculate the number of sampling years
-site_num_sampling_years <- DataFish %>%
-  filter(is_range == FALSE) %>% ##remove any sites that only had collection date listed as year ranges 
-  select(FWB_id, collection_site_id, year) %>%
-  unique() %>%
-  group_by(FWB_id, collection_site_id) %>%
-  count()
-
-##2 ways we could do this, 1 - only keep sites with 1 year of sampling, or 2, when have annual resolution, treat them as "unique" i.e., calculate metrics at that level and account for this in model
-annual_site_list <- DataFish %>%
-  filter(is_range == FALSE) %>% ##remove any sites that only had collection date listed as year ranges 
-  select(FWB_id, collection_site_id, year) %>%
-  unique() %>%
-  filter(!is.na(year)) %>% ##remove NA if want to reduce any ambiguity
-  group_by(FWB_id, collection_site_id) %>%
-  count() %>%
-  filter(n == 1)
-##755 sites with only 1 year of data, or where collection date was NA 
-##728 sites if we also remove those that are NA 
-
-##list where keep all (other than range) to use to calculate at intrasp. var metrics at level of sitexyear combo
-annual_site_list_2 <- DataFish %>%
-  filter(is_range == FALSE) %>% ##remove any sites that only had collection date listed as year ranges 
-  mutate(FWB_id_year = str_c(FWB_id, year, sep = "_")) %>%
-  select(FWB_id_year, collection_site_id, year) %>%
-  unique() %>%
-  group_by(FWB_id_year, collection_site_id) %>%
-  count()
 
 
-##For now, lets go with more conservative estimate, but can discuss this at the next meeting, and will be easy enough to update
-DataFish <- DataFish %>%
-  filter(FWB_id %in% annual_site_list$FWB_id)
 
+##what, why are there 3 food webs without environmental data? 
 #I. Intraspecific variation per species------------
 #some species have var = NA when only one individual sampled
 #we ignore such species in average intra var but still include it in inter var
@@ -143,7 +112,7 @@ str(DataFish)
 DataFish$collected_sample_length_mm <- as.numeric(DataFish$collected_sample_length_mm)
 
 SpVar<-DataFish %>% 
-  group_by(FWB_id, sp_site,collection_site_id,fish_species,fish_family,
+  group_by(FWB_id, site_year_code, sp_site,collection_site_id,fish_species,fish_family,
            waterbody_type, 
            #ecosystem_area_km2, ecosystem_width_m,  ##for 3 FWB_id there are two sizes, so i dont think we want to group by this .. not consistent across site
            collection_decimal_longitude, collection_decimal_latitude) %>% 
@@ -213,6 +182,9 @@ SpVar_env_sf <- st_join(
   join = st_nearest_feature
 )
 
+test <- SpVar_env_sf %>%
+  select(FWB_id) %>%
+  distinct()
 #-----------------------------------------------------------
 # 5. (Optional) Distance check
 #-----------------------------------------------------------
@@ -270,6 +242,7 @@ SpVar_env$num<-1
 SiteVar <- SpVar_env %>%
   group_by(
     FWB_id,
+    site_year_code,
     collection_site_id,
     waterbody_type,
    collection_decimal_latitude,
@@ -361,59 +334,76 @@ SiteVar$propintraspecific_C<-SiteVar$site_intraspe_var_C/(SiteVar$site_interspe_
 SiteVar$propintraspecific_Total<-(SiteVar$site_intraspe_var_N+SiteVar$site_intraspe_var_C)/(SiteVar$site_interspe_var_N+SiteVar$site_intraspe_var_N+SiteVar$site_interspe_var_C+SiteVar$site_intraspe_var_C)
 
 
-##save
-#save(SiteVar, file = "data/Intraspecific_contribution_perSite_Env.RData")
-#save(SpVar_env, file = "data/SpeciesIntraspecific_variance_perSite_Env.RData")
-# write.table(SiteVar,file="../data/Intraspecific_contribution_perSite_Env.txt",row.names=FALSE,sep="\t")
-# write.table(SpVar_env,file="../data/SpeciesIntraspecific_variance_perSite_Env.txt",row.names=FALSE,sep="\t")
+##Read in cutoff site list, and then select the cutoff/criteria 
+cutoff_site_list_all <- read.csv("data/cuttoff_site_lists.csv") 
 
+cutoff_site_list <- cutoff_site_list_all %>%
+  mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
+  filter(min_sp_num == 3) %>% ##select minimum species number
+  filter(cutoff == "75pct") ##select cutoff 
+
+
+##select site/years from chosen cutoff 
+SiteVar_final <- SiteVar %>%
+  filter(site_year_code %in% cutoff_site_list$site_year_code)
+
+SpVar_final <- SpVar_env %>%
+  filter(site_year_code %in% cutoff_site_list$site_year_code)
+
+test <- SiteVar_final %>%
+  select(FWB_id) %>%
+  distinct()
+
+##save - NOTE: remember, this is filtered by cutoff, currently cutoff is not saved in name 
+#save(SiteVar_final, file = "data/Intraspecific_contribution_perSite_Env.RData")
+#save(SpVar_final, file = "data/SpeciesIntraspecific_variance_perSite_Env.RData")
+write.csv(SiteVar_final, "data/SiteVar_3sp_75cutoff.csv", row.names = FALSE) ##update file name if using different cutoffs
+write.csv(SpVar_final, "data/SpVar_3sp_75cutoff.csv", row.names = FALSE) 
 
 ##Create 3 matrices -- 
 
 
 ##keep only sites with at least 3 species, and more than 1 individual sampled per species
-site_list_min1 <-subset(SiteVar,site_nbspe>=2 & site_min_sample_id>=1) 
-##648 food webs
- 
-test <- site_list_min1 %>%
-  select(FWB_id, waterbody_type) %>%
-  unique() %>%
-  group_by(waterbody_type) %>%
-  count()
+site_list_min1 <-cutoff_site_list_all  %>%
+  mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
+  filter(min_sp_num == 2) %>% ##select minimum species number in food web
+  filter(cutoff == "0pct") %>% ##this keeps all possible sites with no cutoff 
+  filter(min_num_ind_per_sample >=1) ##select minimum number of samples per species 
+##681 food webs - when 3 species min
+##849 when 2 species min 
 
+site_list_min3 <-cutoff_site_list_all  %>%
+  mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
+  filter(min_sp_num == 2) %>% ##select minimum species number in food web
+  filter(cutoff == "0pct") %>% ##this keeps all possible sites with no cutoff 
+  filter(min_num_ind_per_sample >=3) ##select minimum number of samples per species 
+##179 food webs - when 3 species min
+##277 when 2 species min
 
-site_list_min3 <-subset(SiteVar,site_nbspe>=2 & site_min_sample_id>=3)
-##226 food webs
+site_list_min5 <-cutoff_site_list_all  %>%
+  mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
+  filter(min_sp_num == 2) %>% ##select minimum species number in food web
+  filter(cutoff == "0pct") %>% ##this keeps all possible sites with no cutoff 
+  filter(min_num_ind_per_sample >=5) 
+##80 food webs - when 3 species min
+##139 when 2 species min
 
-test <- site_list_min3 %>%
-  select(FWB_id, waterbody_type) %>%
-  unique() %>%
-  group_by(waterbody_type) %>%
-  count()
-site_list_min5 <-subset(SiteVar,site_nbspe>=2 & site_min_sample_id>=5) 
-##119 food webs
-
-test <- site_list_min5 %>%
-  select(FWB_id, waterbody_type) %>%
-  unique() %>%
-  group_by(waterbody_type) %>%
-  count()
 
 ##Create both site level and species level matrices 
 SiteVar_min1 <- SiteVar %>%
-  filter(FWB_id %in% site_list_min1$FWB_id)
+  filter(site_year_code %in% site_list_min1$site_year_code)
 SpVar_min1 <- SpVar_env %>%
-  filter(FWB_id %in% site_list_min1$FWB_id)
+  filter(site_year_code %in% site_list_min1$site_year_code)
 
 SiteVar_min3 <- SiteVar %>%
-  filter(FWB_id %in% site_list_min3$FWB_id)
+  filter(site_year_code %in% site_list_min3$site_year_code)
 SpVar_min3 <- SpVar_env %>%
-  filter(FWB_id %in% site_list_min3$FWB_id)
+  filter(site_year_code %in% site_list_min3$site_year_code)
 
 SiteVar_min5 <- SiteVar %>%
-  filter(FWB_id %in% site_list_min5$FWB_id)
+  filter(site_year_code %in% site_list_min5$site_year_code)
 SpVar_min5 <- SpVar_env %>%
-  filter(FWB_id %in% site_list_min5$FWB_id)
+  filter(site_year_code %in% site_list_min5$site_year_code)
 
 
 test <- SpVar_min5 %>%
@@ -421,12 +411,12 @@ test <- SpVar_min5 %>%
   unique()
 ##save all as csvs
 
-write.csv(SiteVar_min1, "data/analysis_csvs/SiteVar_min1.csv")
-write.csv(SpVar_min1, "data/analysis_csvs/SpVar_min1.csv")
-write.csv(SiteVar_min3, "data/analysis_csvs/SiteVar_min3.csv")
-write.csv(SpVar_min3, "data/analysis_csvs/SpVar_min3.csv")
-write.csv(SiteVar_min5, "data/analysis_csvs/SiteVar_min5.csv")
-write.csv(SpVar_min5, "data/analysis_csvs/SpVar_min5.csv")
+write.csv(SiteVar_min1, "data/analysis_csvs/SiteVar_min1.csv", row.names = FALSE)
+write.csv(SpVar_min1, "data/analysis_csvs/SpVar_min1.csv", row.names = FALSE)
+write.csv(SiteVar_min3, "data/analysis_csvs/SiteVar_min3.csv", row.names = FALSE)
+write.csv(SpVar_min3, "data/analysis_csvs/SpVar_min3.csv", row.names = FALSE)
+write.csv(SiteVar_min5, "data/analysis_csvs/SiteVar_min5.csv", row.names = FALSE)
+write.csv(SpVar_min5, "data/analysis_csvs/SpVar_min5.csv", row.names = FALSE)
 
 
 
