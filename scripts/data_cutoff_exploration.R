@@ -12,18 +12,7 @@ library(purrr)
 ## Number of species retained at different cut-offs
 ## Average number of individuals per species 
 
-##At least 2 species 
-sitevar_min1 <- read.csv("data/analysis_csvs/SiteVar_min1.csv")
 
-spvar_min1 <- read.csv("data/analysis_csvs/SpVar_min1.csv")
-
-sitevar_min1_sites <- sitevar_min1 %>%
-  select(FWB_id) %>%
-  distinct()
-
-spvar_min1_sp_num <- spvar_min1 %>%
-  select(fish_species) %>%
-  distinct()
 
 ##Step 1: get data to 1 year of sampling 
 df_all <- read_excel("data/FINAL_ALLindiv_February2026.xlsx") 
@@ -279,3 +268,5 @@ ggplot(summary_all_cutoffs, aes(x = factor(cutoff_num), y = num_species, fill = 
 write.csv(summary_all_cutoffs, "data/cuttoff_site_lists.csv", row.names = FALSE)
 
 
+
+##Okay so -- current cutoff, 2 species, 75% -- for those 25% w/ less than 3 replicates, what proportion of total number of individuals in that food web are they ? 

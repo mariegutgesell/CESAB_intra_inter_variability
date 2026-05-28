@@ -339,7 +339,7 @@ cutoff_site_list_all <- read.csv("data/cuttoff_site_lists.csv")
 
 cutoff_site_list <- cutoff_site_list_all %>%
   mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
-  filter(min_sp_num == 3) %>% ##select minimum species number
+  filter(min_sp_num == 2) %>% ##select minimum species number
   filter(cutoff == "75pct") ##select cutoff 
 
 
@@ -357,9 +357,46 @@ test <- SiteVar_final %>%
 ##save - NOTE: remember, this is filtered by cutoff, currently cutoff is not saved in name 
 #save(SiteVar_final, file = "data/Intraspecific_contribution_perSite_Env.RData")
 #save(SpVar_final, file = "data/SpeciesIntraspecific_variance_perSite_Env.RData")
-write.csv(SiteVar_final, "data/SiteVar_3sp_75cutoff.csv", row.names = FALSE) ##update file name if using different cutoffs
-write.csv(SpVar_final, "data/SpVar_3sp_75cutoff.csv", row.names = FALSE) 
+write.csv(SiteVar_final, "data/SiteVar_2sp_75cutoff.csv", row.names = FALSE) ##update file name if using different cutoffs
+write.csv(SpVar_final, "data/SpVar_2sp_75cutoff.csv", row.names = FALSE) 
 
+
+##Okay so -- current cutoff, 2 species, 75% -- for those 25% w/ less than 3 replicates, what proportion of total number of individuals in that food web are they ? 
+cutoff_site_list_25 <- cutoff_site_list %>%
+  filter(min_num_ind_per_sample < 3)
+
+
+datafish_25 <- DataFish %>%
+  filter(site_year_code %in% cutoff_site_list_25$site_year_code)
+
+
+datafish_25_total <- datafish_25 %>%
+  group_by(site_year_code) %>%
+  count() %>%
+  rename(num_ind_total = "n")
+
+
+datafish_25_sp_total <- datafish_25 %>%
+  group_by(site_year_code, scientific_name) %>%
+  count() %>%
+  rename(num_ind_per_species = "n") %>%
+  left_join(datafish_25_total, by = "site_year_code") %>%
+  mutate(percent_total_ind = num_ind_per_species/num_ind_total*100)
+
+
+
+rare_sp <- datafish_25_sp_total %>%
+  filter(num_ind_per_species < 3)
+
+
+ggplot(rare_sp, aes(x = percent_total_ind)) +
+  geom_histogram()
+
+rare_sp %>%
+  group_by(site_year_code) %>%
+  summarise(percent_total_ind_sum = sum(percent_total_ind)) %>%
+  ggplot(aes(x = percent_total_ind_sum)) +
+  geom_histogram()
 ##Create 3 matrices -- 
 
 
