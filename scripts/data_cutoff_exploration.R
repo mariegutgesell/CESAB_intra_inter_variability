@@ -19,13 +19,14 @@ df_all <- read_excel("data/FINAL_ALLindiv_February2026.xlsx")
 
 
 ##clean data
-##select only fish, where have C/N data and associated scientific name
-DataFish<-subset(df_all,!is.na(d15N) & !is.na(d13C) & organism_type=="fish" & !is.na(scientific_name))
-
+##select only fish, where have C/N data and associated scientific name and NA  for species name 
+DataFish<-subset(df_all,!is.na(d15N) & !is.na(d13C) & organism_type=="fish" & fish_species != "NA")
+#DataFish<-subset(df_all,!is.na(d15N) & !is.na(d13C) & organism_type=="fish" & !is.na(scientific_name))
 ##add species-site identifier column
 DataFish$sp_site<-paste(DataFish$fish_species,DataFish$collection_site_id,sep="_")
 ##Assign 1 - number of fish
 DataFish$num<-1
+
 
 ##normalise data
 DataFish<-DataFish %>% 
@@ -87,7 +88,7 @@ annual_site_list <- datafish_summary_site %>%
   mutate(site_year_code = paste(FWB_id, year, sep = "_"))
 
 ##945 sites 
-
+##936 when NA sp name are removed
 
 ##Select the site and year from datafish
 datafish_annual <- DataFish %>%
@@ -104,7 +105,7 @@ num_sites_min2sp <- datafish_annual_min2sp %>%
   select(FWB_id, collection_site_id, year) %>%
   distinct()
 ##849 food webs 
-
+##840 when NA sites removed
 datafish_summary_sp_min2sp <- datafish_annual_min2sp %>%
   group_by(FWB_id, collection_site_id, year, site_year_code, number_sampling_years, scientific_name) %>%
   count() %>%

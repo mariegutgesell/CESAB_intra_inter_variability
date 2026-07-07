@@ -80,7 +80,7 @@ df_all <- read_excel("data/FINAL_ALLindiv_February2026.xlsx")
 
 ##clean data
 ##select only fish, where have C/N data and associated scientific name
-DataFish<-subset(df_all,!is.na(d15N) & !is.na(d13C) & organism_type=="fish" & !is.na(scientific_name))
+DataFish<-subset(df_all,!is.na(d15N) & !is.na(d13C) & organism_type=="fish" & fish_species != "NA")
 
 
 
@@ -88,6 +88,8 @@ DataFish<-subset(df_all,!is.na(d15N) & !is.na(d13C) & organism_type=="fish" & !i
 DataFish$sp_site<-paste(DataFish$fish_species,DataFish$collection_site_id,sep="_")
 ##Assign 1 - number of fish
 DataFish$num<-1
+
+
 
 
 ##normalise data
@@ -99,19 +101,33 @@ DataFish<-DataFish %>%
           d13C_norm = (d13C - min(d13C, na.rm = TRUE))/(max(d13C, na.rm = TRUE)-min(d13C, na.rm = TRUE)))
 
 
+##Read in cutoff site list, and then select the cutoff/criteria 
+cutoff_site_list_all <- read.csv("data/cuttoff_site_lists.csv")  
 
+
+cutoff_site_list <- cutoff_site_list_all %>%
+  mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
+  filter(min_sp_num == 2) %>% ##select minimum species number
+  filter(cutoff == "75pct") ##select cutoff 
+##455 sites 
+
+##select site/years from chosen cutoff 
+DataFish_final <- DataFish %>%
+  filter(site_year_code %in% cutoff_site_list$site_year_code)
 
 
 ##what, why are there 3 food webs without environmental data? 
 #I. Intraspecific variation per species------------
 #some species have var = NA when only one individual sampled
 #we ignore such species in average intra var but still include it in inter var
-colnames(DataFish)
-str(DataFish)
+colnames(DataFish_final)
+str(DataFish_final)
 #levels(DataFish$Diet)
-DataFish$collected_sample_length_mm <- as.numeric(DataFish$collected_sample_length_mm)
+DataFish_final$collected_sample_length_mm <- as.numeric(DataFish_final$collected_sample_length_mm)
 
-SpVar<-DataFish %>% 
+
+
+SpVar<-DataFish_final %>% 
   group_by(FWB_id, site_year_code, sp_site,collection_site_id,fish_species,fish_family,
            waterbody_type, 
            #ecosystem_area_km2, ecosystem_width_m,  ##for 3 FWB_id there are two sizes, so i dont think we want to group by this .. not consistent across site
@@ -132,12 +148,17 @@ SpVar$collection_decimal_longitude
 library(sf)
 library(dplyr)
 
+na_fish <- SpVar %>%
+  filter(fish_species == "NA")
+##should be 0
 
 test <- SpVar %>%
   select(collection_site_id) %>%
   group_by(collection_site_id) %>%
   count()
+#455 sites - so i think okay .. 
 
+#7205
 ############################################################
 # Spatial join between fish site data and environmental data
 # Purpose: Merge fish variables with environmental variables
@@ -334,31 +355,33 @@ SiteVar$propintraspecific_C<-SiteVar$site_intraspe_var_C/(SiteVar$site_interspe_
 SiteVar$propintraspecific_Total<-(SiteVar$site_intraspe_var_N+SiteVar$site_intraspe_var_C)/(SiteVar$site_interspe_var_N+SiteVar$site_intraspe_var_N+SiteVar$site_interspe_var_C+SiteVar$site_intraspe_var_C)
 
 
-##Read in cutoff site list, and then select the cutoff/criteria 
-cutoff_site_list_all <- read.csv("data/cuttoff_site_lists.csv") 
 
-cutoff_site_list <- cutoff_site_list_all %>%
-  mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
-  filter(min_sp_num == 2) %>% ##select minimum species number
-  filter(cutoff == "75pct") ##select cutoff 
+
+##Read in cutoff site list, and then select the cutoff/criteria -- THIS IS NOW DONE AT BEGINNING
+#cutoff_site_list_all <- read.csv("data/cuttoff_site_lists.csv") 
+
+#cutoff_site_list <- cutoff_site_list_all %>%
+#  mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
+#  filter(min_sp_num == 2) %>% ##select minimum species number
+#  filter(cutoff == "75pct") ##select cutoff 
 
 
 ##select site/years from chosen cutoff 
-SiteVar_final <- SiteVar %>%
-  filter(site_year_code %in% cutoff_site_list$site_year_code)
+#SiteVar_final <- SiteVar %>%
+#  filter(site_year_code %in% cutoff_site_list$site_year_code)
 
-SpVar_final <- SpVar_env %>%
-  filter(site_year_code %in% cutoff_site_list$site_year_code)
+#SpVar_final <- SpVar_env %>%
+#  filter(site_year_code %in% cutoff_site_list$site_year_code)
 
-test <- SiteVar_final %>%
-  select(FWB_id) %>%
-  distinct()
+#test <- SiteVar_final %>%
+#  select(FWB_id) %>%
+#  distinct()
 
 ##save - NOTE: remember, this is filtered by cutoff, currently cutoff is not saved in name 
 #save(SiteVar_final, file = "data/Intraspecific_contribution_perSite_Env.RData")
 #save(SpVar_final, file = "data/SpeciesIntraspecific_variance_perSite_Env.RData")
-write.csv(SiteVar_final, "data/SiteVar_2sp_75cutoff.csv", row.names = FALSE) ##update file name if using different cutoffs
-write.csv(SpVar_final, "data/SpVar_2sp_75cutoff.csv", row.names = FALSE) 
+write.csv(SiteVar, "data/SiteVar_2sp_75cutoff.csv", row.names = FALSE) ##update file name if using different cutoffs
+write.csv(SpVar, "data/SpVar_2sp_75cutoff.csv", row.names = FALSE) 
 
 
 ##Okay so -- current cutoff, 2 species, 75% -- for those 25% w/ less than 3 replicates, what proportion of total number of individuals in that food web are they ? 
@@ -388,6 +411,10 @@ datafish_25_sp_total <- datafish_25 %>%
 rare_sp <- datafish_25_sp_total %>%
   filter(num_ind_per_species < 3)
 
+rare_sp_mean <- rare_sp %>%
+  ungroup() %>%
+  summarise(mean_percent_total_ind = mean(percent_total_ind),
+            sd_percent_total_ind = sd(percent_total_ind))
 
 ggplot(rare_sp, aes(x = percent_total_ind)) +
   geom_histogram()
