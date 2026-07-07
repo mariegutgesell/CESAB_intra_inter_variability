@@ -16,7 +16,12 @@ library(cowplot)
 
 ##read in contribution of site level intraspecific contribution RData
 #load("data/Intraspecific_contribution_perSite_Env.RData") ##produced by 2_Intra_vs_Inter_21_01_26.R
-SiteVar <- read.csv("data/SiteVar_3sp_75cutoff.csv")
+SiteVar <- read.csv("data/SiteVar_2sp_75cutoff.csv") %>%
+  mutate(Climate_zone_2cat = case_when(
+    startsWith(Climate_zone_e2, "Co") ~"Cold/Cool",
+    startsWith(Climate_zone_e2, "Ho") ~"Warm/Hot",
+    startsWith(Climate_zone_e2, "Wa") ~"Warm/Hot",
+  ))
 
 ##C:N ratio -- look for effect especially in muscle, but may not be available 
 
@@ -40,6 +45,7 @@ SiteVar <- read.csv("data/SiteVar_3sp_75cutoff.csv")
 #SiteVar$propintraspecific_C<-SiteVar$site_intraspe_var_C/(SiteVar$site_interspe_var_C+SiteVar$site_intraspe_var_C)
 #SiteVar$propintraspecific_Total<-(SiteVar$site_intraspe_var_N+SiteVar$site_intraspe_var_C)/(SiteVar$site_interspe_var_N+SiteVar$site_intraspe_var_N+SiteVar$site_interspe_var_C+SiteVar$site_intraspe_var_C)
 ##these are already calculated, just keeping here for formulas
+
 
 
 ###1) Create map of sites and generate boxplots that visualize % of total variance that comes from intraspecific variation in both C and N ----
@@ -73,19 +79,22 @@ test <- sites_geo %>%
   filter(is.na(continent))
 
 sites_geo <- sites_geo %>%
-  select(collection_site_id, waterbody_type, country, continent, propintraspecific_N, propintraspecific_C) %>%
-  pivot_longer(cols= c(propintraspecific_N, propintraspecific_C), names_to = "prop_intraspecific_var_type", values_to = "prop_intraspecific_var") %>%
+  select(collection_site_id, waterbody_type, Climate_zone_2cat,  country, continent, propintraspecific_N, propintraspecific_C, propintraspecific_Total) %>%
+  pivot_longer(cols= c(propintraspecific_N, propintraspecific_C, propintraspecific_Total), names_to = "prop_intraspecific_var_type", values_to = "prop_intraspecific_var") %>%
   mutate(prop_type = case_when(
     startsWith("propintraspecific_N", prop_intraspecific_var_type) ~ "N",
     startsWith("propintraspecific_C", prop_intraspecific_var_type) ~ "C",
+    startsWith("propintraspecific_Total", prop_intraspecific_var_type) ~ "Total",
   ))
 
 
+world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf") %>%
+  filter(admin != "Antarctica")
 ##Update projection for plotting map -- looks good
 # Robinson projection (good-looking global)
 crs_robin <- "+proj=robin"
 
-world_r <- st_transform(countries, crs_robin)
+world_r <- st_transform(world, crs_robin)
 sites_r <- st_transform(sites_coord, crs_robin)
 
 p_map <- ggplot() +
@@ -105,6 +114,7 @@ p_map <- ggplot() +
 p_map
 
 ##something is wrong with the lat/longs here...have some points in the middle of the ocean 
+##could add something for species richness and 
 
 #ggsave("sites_global_map.pdf", p, width = 7.0, height = 4.2, units = "in")
 #ggsave("sites_global_map.png", p, width = 7.0, height = 4.2, units = "in", dpi = 600)
@@ -114,7 +124,8 @@ p_map
 make_box <- function(dat_ct, title = NULL) {
   ggplot(dat_ct, aes(x = prop_type, y = prop_intraspecific_var, fill = prop_type)) +
     geom_boxplot(width = 0.7, outlier.size = 0.6) +
-    labs(title = title, x = NULL, y = " % Within Species \n Variability") +
+    labs(title = title, x = NULL, y = "% CIV") +
+    scale_fill_manual(values = c("darkgrey", "white")) +
     # theme_minimal(base_size = 9) +
     theme_classic()+
     theme(
@@ -168,9 +179,88 @@ p_final
 
 
 
+##Brief descriptive stats ----------------
+##Number of communities -- 453 (# of sites) --455
+##Number of species:
+SpVar <- read.csv("data/SpVar_2sp_75cutoff.csv") 
+sp_num <- SpVar %>%
+  select(fish_species) %>%
+  distinct()
+fam_num <- SpVar %>%
+  select(fish_family) %>%
+  distinct()
+
+##Number of countries:
+country_num <- as.data.frame(sites_geo) %>%
+  select(country) %>%
+  ungroup() %>%
+  distinct()
 
 
+##Mean richness:
+mean_rich <- SiteVar %>%
+  summarise(mean_richness = mean(site_nbspe),
+            sd_richness = sd(site_nbspe),
+            median_richness = median(site_nbspe))
+
+samp_mean <- SiteVar %>%
+  summarise(mean_samplesize = mean(site_mean_sample_id),
+            sd_samplesize = sd(site_mean_sample_id),
+            median_samplesize = median(site_mean_sample_id))
+
+##mean by continent: 
+mean_continent <- as.data.frame(sites_geo) %>%
+  group_by(continent, prop_intraspecific_var_type) %>%
+  summarise(mean_CIV = mean(prop_intraspecific_var),
+            sd_CIV = sd(prop_intraspecific_var),
+            median_CIV = median(prop_intraspecific_var))
+
+##run aov for each continent
+library(dplyr)
+library(purrr)
+library(broom)
+
+continent_aov <- sites_geo %>%
+  group_by(continent) %>%
+  nest() %>%
+  mutate(
+    model = map(data, ~ aov(prop_intraspecific_var ~ prop_intraspecific_var_type,
+                            data = .x)),
+    anova = map(model, tidy)
+  ) %>%
+  select(continent, anova) %>%
+  unnest(anova)
+
+continent_aov
+
+continents_aov_2 <- aov(prop_intraspecific_var ~ prop_intraspecific_var_type * continent,
+    data = sites_geo)
+continents_aov_2
+TukeyHSD(continents_aov_2)
+##Regression and ANOVA for sp richness, habitat and climate
+c_rich_lm <- lm(propintraspecific_C ~ site_nbspe, data = SiteVar)
+summary(c_rich_lm)
+
+n_rich_lm <- lm(propintraspecific_N ~ site_nbspe, data = SiteVar)
+summary(n_rich_lm)
+
+c_hab_aov <- aov(propintraspecific_C ~ Type, data = SiteVar)
+summary(c_hab_aov)
+
+n_hab_aov <- aov(propintraspecific_N ~ Type, data = SiteVar)
+summary(c_hab_aov)
+
+c_clim_aov <- aov(propintraspecific_C ~ Climate_zone_2cat, data = SiteVar)
+summary(c_clim_aov)
+
+n_clim_aov <- aov(propintraspecific_N ~ Climate_zone_2cat, data = SiteVar)
+summary(n_clim_aov)
+
+##Correlation between % CIV in C and N 
+c_n <- lm(propintraspecific_N ~ propintraspecific_C, data = SiteVar)
+summary(c_n)
 ###Some exploratory plots to look at differences in variation contribution ----------------
+
 ##plotting distributions
 hist_N_intra <- ggplot(SiteVar, aes(x = propintraspecific_N)) +
   geom_histogram() +
@@ -185,77 +275,50 @@ hist_C_intra
 
 ##comparing variation in proportion 
 
-#color1 <- c("darkred", "darkcyan")
 color1 <- c("white", "darkgrey")
-violin_c_n <- sites_geo  %>%
-  ggplot(aes(x = waterbody_type, y = prop_intraspecific_var,  fill = prop_type)) +
-  geom_violin() +
+
+box_c_n_cn <- sites_geo %>%
+  ggplot(aes(x = prop_type, y = prop_intraspecific_var)) +
+  geom_boxplot() +
   scale_fill_manual(values = color1)+
   theme_classic() +
-  ylab("Relative Contribution to Intraspecific Variability") +
-  theme(axis.title.x = element_blank(), legend.position = "right")
+  ylab("% CIV") +
+  theme(axis.title.x = element_blank())
+box_c_n_cn
 
-violin_c_n
-
-violin_c_n_2 <- sites_geo %>%
-  ggplot(aes(x = prop_type, y = prop_intraspecific_var, fill = prop_type)) +
-  geom_violin() +
-  scale_fill_manual(values = color1)+
-  theme_classic() +
-  ylab("Relative Contribution to \nIntraspecific Variability") +
-  theme(axis.title.x = element_blank(), legend.position = "none")
-
-violin_c_n_2
-
-box_c_n <- sites_geo %>%
+box_c_n_habitat <- sites_geo %>%
   ggplot(aes(x = prop_type, y = prop_intraspecific_var, fill = waterbody_type)) +
   geom_boxplot() +
   scale_fill_manual(values = color1)+
   theme_classic() +
-  ylab("% Within Species Variability") +
+  ylab("% CIV") +
   theme(axis.title.x = element_blank())
 
-box_c_n
+box_c_n_habitat
 
-box_c_n_2 <- sites_geo %>%
-  ggplot(aes(x = prop_type, y = prop_intraspecific_var, fill = prop_type)) +
+
+color2 <- c("lightblue", "red")
+box_climate <- sites_geo %>%
+  ggplot(aes(x = prop_type, y = prop_intraspecific_var, fill = Climate_zone_2cat)) +
   geom_boxplot() +
-  scale_fill_manual(values = color1)+
+  scale_fill_manual(values = color2)+
   theme_classic() +
-  ylab("Relative Contribution to \nIntraspecific Variability") +
-  theme(axis.title.x = element_blank(), legend.position = "none")
+  ylab("% CIV") +
+  theme(axis.title.x = element_blank())
 
-box_c_n_2
+box_climate
 
-box_c_n_bycontinent <- sites_geo %>%
-  ggplot(aes(x = prop_type, y = prop_intraspecific_var, fill = prop_type)) +
-  geom_boxplot() +
- scale_fill_manual(values = color1)+
-  theme_classic() +
-  ylab("Relative Contribution to \nIntraspecific Variability") +
-  theme(axis.title.x = element_blank(), legend.position = "none") +
-  facet_wrap(~continent)
 
-box_c_n_bycontinent
-
-box_c_n_bycontinent_2 <- sites_geo %>%
-  ggplot(aes(x = prop_type, y = prop_intraspecific_var, fill = continent)) +
-  geom_boxplot() +
- # scale_fill_manual(values = color1)+
-  theme_classic() +
-  ylab("Relative Contribution to \nIntraspecific Variability") +
-  theme(axis.title.x = element_blank(), legend.position = "right") 
-
-box_c_n_bycontinent_2
-
+plot_sup <- ggarrange(box_c_n_habitat, box_climate, legend = "bottom", nrow = 1, ncol = 2, labels = c("a)", "b)"), font.label = list(colour = "black", size = 12))
+plot_sup
 
 
 cn_correlation <- ggplot(SiteVar, aes(x = propintraspecific_C, y = propintraspecific_N)) +
   geom_point(color = "black") +
   geom_smooth(method = "lm", color = "darkred") +
   theme_classic() +
-  ylab("% Within Variability in N") +
-  xlab("% Within Variability in C") 
+  ylab("% CIV in N") +
+  xlab("% CIV in C") 
 
 cn_correlation
 
@@ -268,9 +331,22 @@ plot_1
 
 
 ##Variation in proportion contribution by species richness
-ggplot(SiteVar, aes(x = log(site_nbspe), y = propintraspecific_C)) +
+SiteVar_long <- SiteVar %>%
+  pivot_longer(cols= c(propintraspecific_N, propintraspecific_C), names_to = "prop_intraspecific_var_type", values_to = "prop_intraspecific_var") %>%
+  mutate(prop_type = case_when(
+    startsWith("propintraspecific_N", prop_intraspecific_var_type) ~ "N",
+    startsWith("propintraspecific_C", prop_intraspecific_var_type) ~ "C",
+  ))
+cn_sprich_plot <- ggplot(SiteVar_long, aes(x = log(site_nbspe), y = prop_intraspecific_var, group = prop_type, color = prop_type)) +
   geom_point() +
-  geom_smooth(method = "lm")
+  geom_smooth(method = "lm") +
+  theme_classic() +
+  ylab("% CIV") +
+  xlab("Species Richness (log)")
+
+
+plot_2 <- ggarrange(cn_correlation, cn_sprich_plot, legend = "right", nrow = 1, ncol = 2, labels = c("a)", "b)"), font.label = list(colour = "black", size = 12))
+plot_2
 
 ggplot(SiteVar, aes(x = log(site_nbspe), y = propintraspecific_N)) +
   geom_point() +
