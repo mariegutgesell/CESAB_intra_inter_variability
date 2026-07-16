@@ -1,32 +1,46 @@
-##Testing different thresholds 
-
+##Code to generate cutoff lists based on thresholds of species and sampling number 
 
 
 library(tidyverse)
 library(ggplot2)
 library(purrr)
-
-##Read in min1 dataset -- this has minimum 1 replicate per species, and at least 2-3 species (I think at least 3 species is still a reasonable cutoff)
+library(readxl)
 ##Want to look at:
 ## Number of food webs retained at different cut-offs
 ## Number of species retained at different cut-offs
 ## Average number of individuals per species 
 
-
-
-##Step 1: get data to 1 year of sampling 
+##Step 1: load/clean final individual dataset and filter to get data to 1 year of sampling per site ------------
 df_all <- read_excel("data/FINAL_ALLindiv_February2026.xlsx") 
-
 
 ##clean data
 ##select only fish, where have C/N data and associated scientific name and NA  for species name 
-DataFish<-subset(df_all,!is.na(d15N) & !is.na(d13C) & organism_type=="fish" & fish_species != "NA")
-#DataFish<-subset(df_all,!is.na(d15N) & !is.na(d13C) & organism_type=="fish" & !is.na(scientific_name))
+#DataFish<-subset(df_all,!is.na(d15N) & !is.na(d13C) & organism_type=="fish" & fish_species != "NA")
+##note: when we remove fish_species is NA we are removing any fish that are identified to only to genus level - this can create false diversity and intravar. because we are removing individuals from different speceis from a community .. 
+#test <- subset(df_all,!is.na(d15N) & !is.na(d13C) & organism_type=="fish" & fish_species == "NA")
+
+##Going to try an alternative way: 
+DataFish <- df_all %>%
+  filter(!is.na(d15N) & !is.na(d13C) & organism_type=="fish") %>%
+  mutate(across(c(fish_species, fish_genus, fish_family, fish_order), ~ na_if(.x, "NA"))) %>%
+  mutate(fish_name_level = case_when(
+    !is.na(fish_species) ~ "species",
+    !is.na(fish_genus) ~ "genus",
+    !is.na(fish_family) ~ "family",
+    !is.na(fish_order) ~ "order"),
+   fish_scientific_name = coalesce(fish_species, fish_genus, fish_family, fish_order)) %>%
+  filter(!is.na(fish_scientific_name))
+
+##confirm that no NA species names are retained
+test <- DataFish %>%
+  filter(fish_scientific_name == "NA")
+test <- DataFish %>%
+  filter(is.na(fish_scientific_name))
+##NAs come from cases where fish were not idenfied (e.g., mix of rudd and mosquitofish)
 ##add species-site identifier column
-DataFish$sp_site<-paste(DataFish$fish_species,DataFish$collection_site_id,sep="_")
+DataFish$sp_site<-paste(DataFish$fish_scientific_name,DataFish$collection_site_id,sep="_")
 ##Assign 1 - number of fish
 DataFish$num<-1
-
 
 ##normalise data
 DataFish<-DataFish %>% 
@@ -50,22 +64,24 @@ site_num_sampling_years <- DataFish %>%
   count() %>%
   rename(number_sampling_years = "n")
 
-##number of food webs with more than 1 year of smapling 
+##number of food webs with more than 1 year of sampling 
 num_sites_more1yr <- site_num_sampling_years %>%
   filter(number_sampling_years > 1)
 
+##join number of sampling years to main fish df 
 DataFish <- left_join(DataFish, site_num_sampling_years, by = c("FWB_id", "collection_site_id"))
 
 
+##calculate the number of individuals sampled per species within each site-year 
 datafish_summary_sp <- DataFish %>%
-  group_by(FWB_id, collection_site_id, year, number_sampling_years, scientific_name) %>%
+  group_by(FWB_id, collection_site_id, year, number_sampling_years, fish_scientific_name) %>%
   count() %>%
   rename(num_ind_per_species = "n")
 
-
+##calculate richness and mean/min of # of individuals sampled per species within each site-year
 datafish_summary_site <- datafish_summary_sp %>%
   group_by(FWB_id, collection_site_id, year, number_sampling_years) %>%
-  summarise(num_species = n_distinct(scientific_name),
+  summarise(num_species = n_distinct(fish_scientific_name),
             mean_num_ind_per_sample = mean(num_ind_per_species),
             min_num_ind_per_sample = min(num_ind_per_species))
 
@@ -88,7 +104,7 @@ annual_site_list <- datafish_summary_site %>%
   mutate(site_year_code = paste(FWB_id, year, sep = "_"))
 
 ##945 sites 
-##936 when NA sp name are removed
+##936 when NA sp name are removed (fewer sites because some sites only have genus level ID)
 
 ##Select the site and year from datafish
 datafish_annual <- DataFish %>%
@@ -96,7 +112,10 @@ datafish_annual <- DataFish %>%
   filter(site_year_code %in% annual_site_list$site_year_code) %>%
   left_join(datafish_summary_site, by = c("FWB_id", "collection_site_id", "year", "number_sampling_years")) 
 
-##okay lets make a min 2 and min3 species 
+
+##Step 2: generate site lists at different minimum species richness and mean sample size cutoffs ----------
+
+## make a min 2 species dataset
 datafish_annual_min2sp <- datafish_annual %>%
   filter(num_species >=2)  
 
@@ -105,14 +124,17 @@ num_sites_min2sp <- datafish_annual_min2sp %>%
   select(FWB_id, collection_site_id, year) %>%
   distinct()
 ##849 food webs 
-##840 when NA sites removed
+##840 when NA sp names removed
+
+##calculate number of individuals per species within each site
 datafish_summary_sp_min2sp <- datafish_annual_min2sp %>%
-  group_by(FWB_id, collection_site_id, year, site_year_code, number_sampling_years, scientific_name) %>%
+  group_by(FWB_id, collection_site_id, year, site_year_code, number_sampling_years, fish_scientific_name) %>%
   count() %>%
   rename(num_ind_per_species = "n")
 
 head(datafish_summary_sp_min2sp)
 
+## make a min 3 species dataset
 datafish_annual_min3sp <- datafish_annual %>%
   filter(num_species >=3) 
 
@@ -121,18 +143,20 @@ num_sites_min3sp <- datafish_annual_min3sp %>%
   select(FWB_id, collection_site_id, year) %>%
   distinct()
 ##681 food webs 
+##661 when NA sp names removed
 
+##calculate number of individuals per species within each site
 datafish_summary_sp_min3sp <- datafish_annual_min3sp%>%
-  group_by(FWB_id, collection_site_id, year, site_year_code, number_sampling_years, scientific_name) %>%
+  group_by(FWB_id, collection_site_id, year, site_year_code, number_sampling_years, fish_scientific_name) %>%
   count() %>%
   rename(num_ind_per_species = "n")
 
 
-##Calculate thresholds:
+##Calculate thresholds:(i.e., where x% of species within a site have at least 3 individuals sampled)
 site_thresholds_2sp <- datafish_summary_sp_min2sp %>%
   group_by(FWB_id, collection_site_id, year, site_year_code) %>%
   summarise(
-    total_species = n_distinct(scientific_name),
+    total_species = n_distinct(fish_scientific_name),
     species_ge3 = sum(num_ind_per_species >= 3, na.rm = TRUE),
     prop_ge3 = species_ge3 / total_species,
     .groups = "drop"
@@ -156,7 +180,7 @@ names(species_datasets_2sp) <- paste0(cutoffs * 100, "pct")
 site_thresholds_3sp <- datafish_summary_sp_min3sp %>%
   group_by(FWB_id, collection_site_id, year, site_year_code) %>%
   summarise(
-    total_species = n_distinct(scientific_name),
+    total_species = n_distinct(fish_scientific_name),
     species_ge3 = sum(num_ind_per_species >= 3, na.rm = TRUE),
     prop_ge3 = species_ge3 / total_species,
     .groups = "drop"
@@ -178,9 +202,7 @@ names(species_datasets_3sp) <- paste0(cutoffs * 100, "pct")
 
 
 
-
-
-##Now, create function that for each dataset, summarizes table: number of food webs, number of species, mean sample size , min sample size 
+##Create function that for each dataset, summarizes table: number of food webs, number of species, mean sample size , min sample size 
 
 summarise_cutoff_dataset <- function(df, cutoff_name) {
   
@@ -188,16 +210,16 @@ summarise_cutoff_dataset <- function(df, cutoff_name) {
     ungroup() %>%
     summarise(
       num_food_webs = n_distinct(FWB_id),
-      total_num_species = n_distinct(scientific_name)
+      total_num_species = n_distinct(fish_scientific_name)
     )
   
   df %>%
     ungroup() %>%
-    group_by(FWB_id, collection_site_id, year, number_sampling_years, scientific_name) %>%
+    group_by(FWB_id, collection_site_id, year, number_sampling_years, fish_scientific_name) %>%
     count(name = "num_ind_per_species") %>%
     group_by(FWB_id, collection_site_id, year, number_sampling_years) %>%
     summarise(
-      num_species = n_distinct(scientific_name),
+      num_species = n_distinct(fish_scientific_name),
       mean_num_ind_per_sample = mean(num_ind_per_species, na.rm = TRUE),
       min_num_ind_per_sample = min(num_ind_per_species, na.rm = TRUE),
       .groups = "drop"
@@ -260,14 +282,37 @@ ggplot(summary_all_cutoffs, aes(x = factor(cutoff_num), y = num_species, fill = 
   labs(fill = "Minimum Number of Species in Food Web")
 
 
-
-##tomorrow morning: code add to script of 02 essentially creating the site and spvar csvs for all cutoffs above like 75%... and for the 3 species min i think - that way can easily send over ? 
-##could also then run on the 75% and see if results are different ... 
-
 ##Make site list and save -- this will then be easily used to filter the selected sitevar/sp var 
-
 write.csv(summary_all_cutoffs, "data/cuttoff_site_lists.csv", row.names = FALSE)
 
-
+##how does this compare to old cutoffs? ---- 
+cutoff_old <- read.csv("data/cuttoff_site_lists_old.csv")
 
 ##Okay so -- current cutoff, 2 species, 75% -- for those 25% w/ less than 3 replicates, what proportion of total number of individuals in that food web are they ? 
+
+old_sites <- cutoff_old %>%
+  mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
+  filter(min_sp_num == 2) %>% ##select minimum species number
+  filter(cutoff == "75pct") %>% ##select cutoff 
+  select(site_year_code, num_species, mean_num_ind_per_sample, min_num_ind_per_sample) %>%
+  mutate(site_type = "old")
+  #453 sites 
+
+new_sites <- summary_all_cutoffs %>%
+  mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
+  filter(min_sp_num == 2) %>% ##select minimum species number
+  filter(cutoff == "75pct") %>%##select cutoff 
+  select(site_year_code, num_species, mean_num_ind_per_sample, min_num_ind_per_sample) %>%
+  mutate(site_type = "new")
+
+  ##455 sites 
+
+
+##check overlap 
+site_overlap <- full_join(old_sites, new_sites, by = c("site_year_code", "num_species", "mean_num_ind_per_sample", "min_num_ind_per_sample", "site_type"))
+
+
+test <- site_overlap %>%
+  group_by(site_year_code) %>%
+  count()
+##okay, so yes i think this makes sense, that 
