@@ -77,19 +77,29 @@ mapview(Env_sf)
 df_all <- read_excel("data/FINAL_ALLindiv_February2026.xlsx") 
 
 
-
 ##clean data
 ##select only fish, where have C/N data and associated scientific name
-DataFish<-subset(df_all,!is.na(d15N) & !is.na(d13C) & organism_type=="fish" & fish_species != "NA")
+#DataFish<-subset(df_all,!is.na(d15N) & !is.na(d13C) & organism_type=="fish" & fish_species != "NA")
+##note: when we remove fish_species is NA we are removing any fish that are identified to only to genus or higher level - this can create false diversity and intravar. because we are removing individuals from different speceis from a community .. 
+
+##alternative way to retain taxonomic resolution variation -- new species column to use going forward then is fish_scientific_name
+DataFish <- df_all %>%
+  filter(!is.na(d15N) & !is.na(d13C) & organism_type=="fish") %>%
+  mutate(across(c(fish_species, fish_genus, fish_family, fish_order), ~ na_if(.x, "NA"))) %>%
+  mutate(fish_name_level = case_when(
+    !is.na(fish_species) ~ "species",
+    !is.na(fish_genus) ~ "genus",
+    !is.na(fish_family) ~ "family",
+    !is.na(fish_order) ~ "order"),
+    fish_scientific_name = coalesce(fish_species, fish_genus, fish_family, fish_order)) %>%
+  filter(!is.na(fish_scientific_name))
 
 
 
 ##add species-site identifier column
-DataFish$sp_site<-paste(DataFish$fish_species,DataFish$collection_site_id,sep="_")
+DataFish$sp_site<-paste(DataFish$fish_scientific_name,DataFish$collection_site_id,sep="_")
 ##Assign 1 - number of fish
 DataFish$num<-1
-
-
 
 
 ##normalise data
@@ -109,7 +119,7 @@ cutoff_site_list <- cutoff_site_list_all %>%
   mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
   filter(min_sp_num == 2) %>% ##select minimum species number
   filter(cutoff == "75pct") ##select cutoff 
-##455 sites 
+##453 sites 
 
 ##select site/years from chosen cutoff 
 DataFish_final <- DataFish %>%
@@ -128,7 +138,7 @@ DataFish_final$collected_sample_length_mm <- as.numeric(DataFish_final$collected
 
 
 SpVar<-DataFish_final %>% 
-  group_by(FWB_id, site_year_code, sp_site,collection_site_id,fish_species,fish_family,
+  group_by(FWB_id, site_year_code, sp_site,collection_site_id,fish_scientific_name, fish_name_level,
            waterbody_type, 
            #ecosystem_area_km2, ecosystem_width_m,  ##for 3 FWB_id there are two sizes, so i dont think we want to group by this .. not consistent across site
            collection_decimal_longitude, collection_decimal_latitude) %>% 
@@ -140,7 +150,8 @@ SpVar<-DataFish_final %>%
             sp_site_var_length = var(collected_sample_length_mm, na.rm = TRUE),
             collection_decimal_longitude = mean(collection_decimal_longitude, na.rm = TRUE),
             collection_decimal_latitude = mean(collection_decimal_latitude, na.rm = TRUE),
-            sp_site_num_ind = sum(num)) ##number of samples per species
+            sp_site_num_ind = sum(num), 
+            sp_site_body_size_range = max(collected_sample_length_mm) - min(collected_sample_length_mm)) ##number of samples per species
 
 SpVar$VarTot<-SpVar$sp_site_var_N+SpVar$sp_site_var_C
 colnames(SpVar)
@@ -149,16 +160,18 @@ library(sf)
 library(dplyr)
 
 na_fish <- SpVar %>%
-  filter(fish_species == "NA")
+  filter(fish_scientific_name == "NA")
+na_fish <- SpVar %>%
+  filter(is.na(fish_scientific_name))
 ##should be 0
 
 test <- SpVar %>%
   select(collection_site_id) %>%
   group_by(collection_site_id) %>%
   count()
-#455 sites - so i think okay .. 
+#453 sites - so i think okay .. 
 
-#7205
+
 ############################################################
 # Spatial join between fish site data and environmental data
 # Purpose: Merge fish variables with environmental variables
@@ -249,7 +262,7 @@ SpVar_env <- SpVar_env_sf %>%
 
 
 colnames(SpVar_env)
-p1bis<-ggplot(SpVar_env,aes(x=fish_family,y=sp_site_var_N,col=waterbody_type))+geom_point(alpha=0.5) +
+p1bis<-ggplot(SpVar_env,aes(x=fish_scientific_name,y=sp_site_var_N,col=waterbody_type))+geom_point(alpha=0.5) +
   theme_bw()+ 
   geom_smooth()+xlab("abs latitude")+ylab("specioes intraspecific variance")
 p1bis
@@ -328,25 +341,13 @@ SiteVar <- SpVar_env %>%
   )
 
 ##check for any duplicates
-test <- SiteVar %>%
-  select(FWB_id, collection_site_id, waterbody_type) %>%
-  group_by(FWB_id, collection_site_id, waterbody_type) %>%
-  count()
+#test <- SiteVar %>%
+#  select(FWB_id, collection_site_id, waterbody_type) %>%
+#  group_by(FWB_id, collection_site_id, waterbody_type) %>%
+#  count()
 ##FWB_0175, FWB_0215, FWB_0541 - do we know why in DataFish there are two different ecosystem_area_m or ecosystem_width_m?
+##NOTE: these issues have been resolved by not grouping by ecosystem type - now only have 1 value per site
 
-test2 <- SiteVar %>%
-  select(FWB_id, collection_site_id) %>%
-  group_by(FWB_id, collection_site_id) %>%
-  count()
-
-##FWB_0075 and FWB_0093 have both a lotic and a lentic - same gps and environmental data 
-##FWB_0075 and FWB_0093-- in environmental data, this is listed as lentic only, in fish data it has both -- likely is both? but have same lat/long, and therefore will need potentially different FWB? and different environmental data
-##Both are collected by Tim, so would be easy to sort 
-
-
-
-test2 <- st_as_sf(SiteVar, coords = c("collection_decimal_longitude", "collection_decimal_latitude"), crs = 4326, remove = FALSE)
-mapview(test2)
 
 
 ##Calculate proportion of intraspecific variation from C and N variance
@@ -355,39 +356,22 @@ SiteVar$propintraspecific_C<-SiteVar$site_intraspe_var_C/(SiteVar$site_interspe_
 SiteVar$propintraspecific_Total<-(SiteVar$site_intraspe_var_N+SiteVar$site_intraspe_var_C)/(SiteVar$site_interspe_var_N+SiteVar$site_intraspe_var_N+SiteVar$site_interspe_var_C+SiteVar$site_intraspe_var_C)
 
 
-
-
-##Read in cutoff site list, and then select the cutoff/criteria -- THIS IS NOW DONE AT BEGINNING
-#cutoff_site_list_all <- read.csv("data/cuttoff_site_lists.csv") 
-
-#cutoff_site_list <- cutoff_site_list_all %>%
-#  mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
-#  filter(min_sp_num == 2) %>% ##select minimum species number
-#  filter(cutoff == "75pct") ##select cutoff 
-
-
-##select site/years from chosen cutoff 
-#SiteVar_final <- SiteVar %>%
-#  filter(site_year_code %in% cutoff_site_list$site_year_code)
-
-#SpVar_final <- SpVar_env %>%
-#  filter(site_year_code %in% cutoff_site_list$site_year_code)
-
-#test <- SiteVar_final %>%
-#  select(FWB_id) %>%
-#  distinct()
-
-##save - NOTE: remember, this is filtered by cutoff, currently cutoff is not saved in name 
+##save - NOTE: remember, this is filtered by cutoff
 #save(SiteVar_final, file = "data/Intraspecific_contribution_perSite_Env.RData")
 #save(SpVar_final, file = "data/SpeciesIntraspecific_variance_perSite_Env.RData")
 write.csv(SiteVar, "data/SiteVar_2sp_75cutoff.csv", row.names = FALSE) ##update file name if using different cutoffs
 write.csv(SpVar, "data/SpVar_2sp_75cutoff.csv", row.names = FALSE) 
 
 
+##how many species have at least 10 species?
+sites_10sp <- SiteVar %>%
+  filter(site_nbspe >= 8)
+##potentially focus 
+
+##Calculate the proporton of total individuals in a food web that the species with less than 3 replicates make up (i.e., calculating rare species)
 ##Okay so -- current cutoff, 2 species, 75% -- for those 25% w/ less than 3 replicates, what proportion of total number of individuals in that food web are they ? 
 cutoff_site_list_25 <- cutoff_site_list %>%
   filter(min_num_ind_per_sample < 3)
-
 
 datafish_25 <- DataFish %>%
   filter(site_year_code %in% cutoff_site_list_25$site_year_code)
@@ -400,7 +384,7 @@ datafish_25_total <- datafish_25 %>%
 
 
 datafish_25_sp_total <- datafish_25 %>%
-  group_by(site_year_code, scientific_name) %>%
+  group_by(site_year_code, fish_scientific_name) %>%
   count() %>%
   rename(num_ind_per_species = "n") %>%
   left_join(datafish_25_total, by = "site_year_code") %>%
@@ -424,115 +408,5 @@ rare_sp %>%
   summarise(percent_total_ind_sum = sum(percent_total_ind)) %>%
   ggplot(aes(x = percent_total_ind_sum)) +
   geom_histogram()
-##Create 3 matrices -- 
 
 
-##keep only sites with at least 3 species, and more than 1 individual sampled per species
-site_list_min1 <-cutoff_site_list_all  %>%
-  mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
-  filter(min_sp_num == 2) %>% ##select minimum species number in food web
-  filter(cutoff == "0pct") %>% ##this keeps all possible sites with no cutoff 
-  filter(min_num_ind_per_sample >=1) ##select minimum number of samples per species 
-##681 food webs - when 3 species min
-##849 when 2 species min 
-
-site_list_min3 <-cutoff_site_list_all  %>%
-  mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
-  filter(min_sp_num == 2) %>% ##select minimum species number in food web
-  filter(cutoff == "0pct") %>% ##this keeps all possible sites with no cutoff 
-  filter(min_num_ind_per_sample >=3) ##select minimum number of samples per species 
-##179 food webs - when 3 species min
-##277 when 2 species min
-
-site_list_min5 <-cutoff_site_list_all  %>%
-  mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
-  filter(min_sp_num == 2) %>% ##select minimum species number in food web
-  filter(cutoff == "0pct") %>% ##this keeps all possible sites with no cutoff 
-  filter(min_num_ind_per_sample >=5) 
-##80 food webs - when 3 species min
-##139 when 2 species min
-
-
-##Create both site level and species level matrices 
-SiteVar_min1 <- SiteVar %>%
-  filter(site_year_code %in% site_list_min1$site_year_code)
-SpVar_min1 <- SpVar_env %>%
-  filter(site_year_code %in% site_list_min1$site_year_code)
-
-SiteVar_min3 <- SiteVar %>%
-  filter(site_year_code %in% site_list_min3$site_year_code)
-SpVar_min3 <- SpVar_env %>%
-  filter(site_year_code %in% site_list_min3$site_year_code)
-
-SiteVar_min5 <- SiteVar %>%
-  filter(site_year_code %in% site_list_min5$site_year_code)
-SpVar_min5 <- SpVar_env %>%
-  filter(site_year_code %in% site_list_min5$site_year_code)
-
-
-test <- SpVar_min5 %>%
-  select(FWB_id) %>%
-  unique()
-##save all as csvs
-
-write.csv(SiteVar_min1, "data/analysis_csvs/SiteVar_min1.csv", row.names = FALSE)
-write.csv(SpVar_min1, "data/analysis_csvs/SpVar_min1.csv", row.names = FALSE)
-write.csv(SiteVar_min3, "data/analysis_csvs/SiteVar_min3.csv", row.names = FALSE)
-write.csv(SpVar_min3, "data/analysis_csvs/SpVar_min3.csv", row.names = FALSE)
-write.csv(SiteVar_min5, "data/analysis_csvs/SiteVar_min5.csv", row.names = FALSE)
-write.csv(SpVar_min5, "data/analysis_csvs/SpVar_min5.csv", row.names = FALSE)
-
-
-
-
-
-
-#III. Some plots and preliminary stats
-str(SiteVar)
-p1<-ggplot(SiteVar,aes(x=Ecosystem_Type,y=propintraspecific_Total,col=Ecosystem_Type))+geom_boxplot()+theme_bw() +ylab("Intraspecific contribution Total")
-p1
-
-p1bis<-ggplot(SiteVar,aes(x=abs(collection_decimal_latitude),y=propintraspecific_Total,col=Ecosystem_Type))+geom_point(alpha=0.5) +
-  theme_bw()+ 
-  geom_smooth(method='lm',formula= y~x)+xlab("abs latitude")+ylab("Intraspecific contribution Total")
-p1bis
-
-p1bis<-ggplot(SiteVar,aes(x=abs(collection_decimal_latitude),y=propintraspecific_Total,col=Ecosystem_Type))+geom_point(alpha=0.5) +
-  theme_bw()+ 
-  geom_smooth()+xlab("abs latitude")+ylab("Intraspecific contribution Total")
-p1bis
-
-p5<-ggplot(SiteVar,aes(x=site_nbspe,y=propintraspecific_Total,col=Ecosystem_Type))+geom_point(alpha=0.5) +
-  scale_x_continuous(trans='log10')+theme_bw()+ 
-  geom_smooth(method='lm',formula= y~x)+xlab("number of species")+ylab("Intraspecific contribution Total")
-p5
-
-p7<-ggplot(SiteVar,aes(x=site_mean_sample_id,y=propintraspecific_Total,col=Ecosystem_Type))+geom_point(alpha=0.5) +
-  scale_x_continuous(trans='log10')+theme_bw()+ 
-  geom_smooth(method='lm',formula= y~x)+xlab("mean number of individuals sampled per species")+ylab("Intraspecific contribution Total")
-p7
-
-library(DHARMa)
-library(reformulas)
-library(glmmTMB)
-library(car)
-library(performance)
-
-m1<-glmmTMB(propintraspecific_Total~log(site_nbspe)+log(site_mean_sample_id)+abs(collection_decimal_latitude)*Ecosystem_Type,
-            data=SiteVar)
-summary(m1)
-simulationOutput <- simulateResiduals(fittedModel = m1, n = 250)
-plot(simulationOutput)
-Anova(m1)
-
-SpVar_env<-subset(SpVar_env,VarTot>0 & sp_site_var_length>0)
-SpVar_env$log_VarTot<-log10(SpVar_env$VarTot)
-SpVar_env$CV_length<-sqrt(SpVar_env$sp_site_var_length)/SpVar_env$sp_site_mean_length
-
-m1<-glmmTMB(log_VarTot~log(CV_length)+log(sp_site_mean_length)
-            +log(sp_site_num)+abs(collection_decimal_latitude)+(1|Fish.family)+(1|Scientific.nameFishBase)+(1|collection_site_id),data=SpVar_env)
-summary(m1)
-simulationOutput <- simulateResiduals(fittedModel = m1, n = 250)
-plot(simulationOutput)
-Anova(m1)
-r2(m1)
