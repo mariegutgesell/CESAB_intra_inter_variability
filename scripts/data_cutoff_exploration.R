@@ -37,6 +37,7 @@ test <- DataFish %>%
 test <- DataFish %>%
   filter(is.na(fish_scientific_name))
 ##NAs come from cases where fish were not idenfied (e.g., mix of rudd and mosquitofish)
+
 ##add species-site identifier column
 DataFish$sp_site<-paste(DataFish$fish_scientific_name,DataFish$collection_site_id,sep="_")
 ##Assign 1 - number of fish
@@ -316,3 +317,63 @@ test <- site_overlap %>%
   group_by(site_year_code) %>%
   count()
 ##okay, so yes i think this makes sense, that 
+
+##Looking at mixed id levels:
+##note: need to read in and filter to selected sites first, just keeping code here so don't lose it 
+##Look at within these sites, how many genus/family/order are there? 
+fam_ord_sites <- DataFish_final %>%
+  filter(fish_name_level %in% c("family", "order")) %>%
+  select(FWB_id) %>%
+  distinct()
+##31 sites that have family and order level ID 
+
+genus_sites <- DataFish_final %>%
+  filter(fish_name_level %in% c("genus")) %>%
+  select(FWB_id) %>%
+  distinct()
+##69 sites have genus level ID 
+
+mixed_taxon_sites <- DataFish_final %>%
+  filter(fish_name_level %in% c("genus", "family", "order")) %>%
+  select(FWB_id) %>%
+  distinct()
+##Create df of sites that contain mix of taxonomic id levels 
+mixed_taxon_df <- DataFish_final %>%
+  filter(FWB_id %in% mixed_taxon_sites$FWB_id)
+
+write.csv(mixed_taxon_df, "data/mixed_taxon_sites_df.csv")
+richness_by_level <- DataFish_final %>%
+  group_by(FWB_id, fish_name_level) %>%
+  summarise(
+    richness = n_distinct(fish_scientific_name),
+    .groups = "drop"
+  )
+
+total_richness <- DataFish_final %>%
+  group_by(FWB_id) %>%
+  summarise(
+    total_richness = n_distinct(fish_scientific_name),
+    .groups = "drop"
+  )
+
+richness_prop <- richness_by_level %>%
+  left_join(total_richness, by = "FWB_id") %>%
+  mutate(
+    prop_richness = richness / total_richness,
+    percent_richness = 100 * prop_richness
+  )
+
+richness_prop
+
+richness_prop %>%
+  filter(fish_name_level %in% c("genus", "family", "order")) %>%
+  group_by(fish_name_level) %>%
+  summarise(
+    n_sites = n(),
+    mean_percent = mean(percent_richness),
+    median_percent = median(percent_richness),
+    min_percent = min(percent_richness),
+    max_percent = max(percent_richness)
+  )
+
+
