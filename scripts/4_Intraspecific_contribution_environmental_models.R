@@ -85,7 +85,7 @@ SiteVar_min5 <- SiteVar_min5 %>%
 
 ##bind all together 
 SiteVar_all <- rbind(SiteVar_min1, SiteVar_min3, SiteVar_min5) %>%
-  mutate(Climate_zone_2cat = case_when(
+   mutate(Climate_zone_2cat = case_when(
     startsWith(Climate_zone_e2, "Co") ~"Cold/Cool",
     startsWith(Climate_zone_e2, "Ho") ~"Warm/Hot",
     startsWith(Climate_zone_e2, "Wa") ~"Warm/Hot",

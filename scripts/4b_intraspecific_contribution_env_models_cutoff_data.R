@@ -20,9 +20,13 @@ library(visreg)
 library(car)
 library(betareg)
 library(broom)
+library(mgcv)
+library(glmmTMB)
+library(DHARMa)
+library(marginaleffects)
 
 ##read in contribution of site level intraspecific contribution -- from cutoff chosen
-SiteVar <- read.csv("data/SiteVar_3sp_75cutoff.csv") ##produced by 2_Intra_vs_Inter_21_01_26.R
+SiteVar <- read.csv("data/SiteVar_2sp_75cutoff.csv") ##produced by 2_Intra_vs_Inter_21_01_26.R
 
 ##checking duplicate site names/lat longs -- don't worry about for now, come back to once using final data
 ##sometimes have same lat/long with 2 names, and sometimes have same site name with different lat/longs 
@@ -50,9 +54,11 @@ sites1 <- SiteVar%>%
 ##productivity = TP
 ##type = ecosystem type (lake vs. stream)
 ##human ftp = hft
-##size = size_z_scored
-##flow variability = hydro_dis_z_scored
+##size = size_z_scored -- were these standardized within ecosysetm type?
+##flow variability = hydro_dis_z_scored - were these standardized within ecosysetm type?
 ##climate = temp , climate zone 
+
+##need. to check if TP, sp richness and hft are signficantly different between ecosystem types so if should be standardized within ecosystem type 
 ##Data transformations 
 SiteVar <- SiteVar %>%
   mutate(site_nbspe_log = log(site_nbspe),
@@ -65,7 +71,7 @@ SiteVar <- SiteVar %>%
     startsWith(Climate_zone_e2, "Ho") ~"Warm/Hot",
     startsWith(Climate_zone_e2, "Wa") ~"Warm/Hot",
   )) %>%
-  mutate(data_group = "sp3_75pct")
+  mutate(data_group = "sp2_75pct") 
 
 
 
@@ -91,10 +97,6 @@ duplicated_exp_variables <- SiteVar %>%
   )
 
 ##so there are a fair amount of duplicated variables, likely because sites are close togehter  - need to check this carefully when have final data
-##also, some points are in the ocean, again check if this issue remains with final data 
-sites_coord <- st_as_sf(duplicated_exp_variables, coords = c("collection_decimal_longitude", "collection_decimal_latitude"), crs = 4326)
-site_map <- mapview(sites_coord, map.types = "Esri.NatGeoWorldMap", legend = FALSE, cex = 2)
-site_map
 
 corr_mat <- cor(exp_var, use = "pairwise.complete.obs")
 
@@ -108,14 +110,22 @@ corrplot(corr_mat, method = "color", type = "upper",  addCoef.col = "black",
 ggplot(SiteVar, aes(x = propintraspecific_C)) +
   geom_histogram() 
 
+ggplot(SiteVar, aes(x = site_intraspe_var_C)) +
+  geom_histogram() 
+
 ggplot(SiteVar, aes(x = propintraspecific_N)) +
+  geom_histogram() 
+
+ggplot(SiteVar, aes(x = site_intraspe_var_N)) +
   geom_histogram() 
 
 ggplot(SiteVar, aes(x = TP_z_scored)) +
   geom_histogram()
 
+ggplot(SiteVar, aes(x = propintraspecific_Total)) +
+  geom_histogram() 
 
-#SiteVar$Climate_zone_e2 <- ordered(SiteVar$Climate_zone_e2, 
+#SiteVar$Climate_zone_e2propintraspecific_Total#SiteVar$Climate_zone_e2 <- ordered(SiteVar$Climate_zone_e2, 
 #                                       levels = c(
 #                                         "Cold and wet/mesic",
 #                                         "Cool and moist",
@@ -142,6 +152,121 @@ ggplot(SiteVar, aes(x = site_nbspe_log_z_scored, y = propintraspecific_C, color 
   geom_point() +
   geom_smooth(method = "lm")
 
+
+
+###Generalized linear model 
+
+
+##CARBON 
+glmm2_C <- glmmTMB(propintraspecific_C ~ log(site_nbspe) * Climate_zone_2cat * waterbody_type +(1 |FWB_id), data = SiteVar, family = beta_family(link = "logit"))
+summary(glmm2_C)
+Anova(glmm2_C)
+
+glmm3_C <- glmmTMB(propintraspecific_C ~  log(site_nbspe)*Climate_zone_2cat + log(site_nbspe)*waterbody_type  + (1 |FWB_id), data = SiteVar, family = beta_family(link = "logit"))
+summary(glmm3_C)
+Anova(glmm3_C)
+
+glmm4_C <- glmmTMB(propintraspecific_C ~  log(site_nbspe) + Climate_zone_2cat + log(site_nbspe)*waterbody_type  + (1 |FWB_id), data = SiteVar, family = beta_family(link = "logit"))
+summary(glmm4_C)
+Anova(glmm4_C)
+
+glmm5_C <- glmmTMB(propintraspecific_C ~  site_nbspe_log , data = SiteVar, family = beta_family(link = "logit"))
+summary(glmm5_C)
+Anova(glmm5_C)
+
+min(SiteVar$site_nbspe_log)
+max(SiteVar$site_nbspe_log)
+
+nd_C <- datagrid(site_nbspe_log = seq(0.5, 4, 0.1), model = glmm5_C)
+nd_C$prediction1 <- predict(glmm5_C, newdata = nd_C, type = "response")
+
+c_site <- ggplot() +
+  geom_point(data = SiteVar, aes(x = site_nbspe_log, y = propintraspecific_C, color= Climate_zone_2cat) ) +
+  scale_color_manual(values = c("#99CCCC","#993333" )) + 
+  geom_line(data = nd_C, aes(x = site_nbspe_log, y = prediction1), color = "black")+
+ # geom_abline(slope = -0.44131, intercept =  0.83235 , color = "black", linewidth = 2) +
+  theme_classic() +
+  xlab("Species Richness (log)") +
+  ylab("Proportion Intraspecific Variance in C")
+c_site
+
+c_violin <- ggplot(SiteVar, aes(y = propintraspecific_C, x = "")) +
+  geom_violin() +
+  theme_classic() +
+  labs(y = "Proportion Intraspecific Variance in C", x = "") +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+c_violin
+##NITROGEN 
+
+glmm2_N <- glmmTMB(propintraspecific_N ~ log(site_nbspe) * Climate_zone_2cat * waterbody_type +(1 |FWB_id), data = SiteVar, family = beta_family(link = "logit"))
+summary(glmm2_N)
+Anova(glmm2_N)
+
+glmm3_N <- glmmTMB(propintraspecific_N ~ log(site_nbspe) + Climate_zone_2cat + waterbody_type + log(site_nbspe)*Climate_zone_2cat + log(site_nbspe)*waterbody_type + Climate_zone_2cat*waterbody_type + (1 |FWB_id), data = SiteVar, family = beta_family(link = "logit"))
+summary(glmm3_N)
+Anova(glmm3_N)
+
+
+glmm4_N <- glmmTMB(propintraspecific_N ~ log(site_nbspe) + Climate_zone_2cat + waterbody_type + log(site_nbspe)*Climate_zone_2cat + Climate_zone_2cat*waterbody_type + (1 |FWB_id), data = SiteVar, family = beta_family(link = "logit"))
+summary(glmm4_N)
+Anova(glmm4_N)
+
+glmm5_N <- glmmTMB(propintraspecific_N ~  log(site_nbspe)*waterbody_type + log(site_nbspe)*Climate_zone_2cat  + (1 |FWB_id), data = SiteVar, family = beta_family(link = "logit"))
+summary(glmm5_N)
+Anova(glmm5_N)
+
+glmm6_N <- glmmTMB(propintraspecific_N ~   log(site_nbspe)*Climate_zone_2cat +waterbody_type + (1 |FWB_id), data = SiteVar, family = beta_family(link = "logit"))
+summary(glmm6_N)
+Anova(glmm6_N)
+
+glmm7_N <- glmmTMB(propintraspecific_N ~   log(site_nbspe)*Climate_zone_2cat, data = SiteVar, family = beta_family(link = "logit"))
+summary(glmm7_N)
+Anova(glmm7_N)
+
+
+glmm8_N <- glmmTMB(propintraspecific_N ~   site_nbspe_log*Climate_zone_2cat, data = SiteVar, family = beta_family(link = "logit"))
+summary(glmm8_N)
+Anova(glmm8_N)
+simulationOutput <- simulateResiduals(fittedModel = glmm8_N, plot = FALSE)
+plot(simulationOutput)
+#DHARMa::residuals(simulationOutput)
+
+
+
+nd_N <- datagrid(site_nbspe_log = seq(0.5, 4, 0.1), Climate_zone_2cat = c("Cold/Cool", "Warm/Hot"), model = glmm8_N)
+nd_N$prediction1 <- predict(glmm8_N, newdata = nd_N, type = "response")
+
+n_site <- ggplot() +
+  geom_point(data = SiteVar, aes(x = site_nbspe_log, y = propintraspecific_C, color= Climate_zone_2cat) ) +
+  scale_color_manual(values = c("#99CCCC","#993333" )) + 
+  geom_line(data = nd_N, aes(x = site_nbspe_log, y = prediction1, group = Climate_zone_2cat, color = Climate_zone_2cat))+
+#  scale_color_manual(values = c("#99CCCC","#993333" )) + 
+  # geom_abline(slope = -0.44131, intercept =  0.83235 , color = "black", linewidth = 2) +
+  theme_classic() +
+  xlab("Species Richness (log)") +
+  ylab("Proportion Intraspecific Variance in N")
+n_site
+
+n_violin <- ggplot(SiteVar, aes(y = propintraspecific_N, x = "")) +
+  geom_violin() +
+  theme_classic() +
+  labs(y = "Proportion Intraspecific Variance in N", x = "") +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+n_violin
+
+
+c_plot <- ggarrange(c_violin, c_site, nrow = 1, ncol = 2 ,  widths = c(1, 3))
+c_plot
+n_plot <- ggarrange(n_violin, n_site, nrow = 1, ncol = 2 , widths = c(1, 3))
+n_plot
+
+ggarrange(c_plot, n_plot, labels = c("a", "b"), nrow = 2, ncol =1)
 ##Write function that conducts beta regressions or ANOVAs over all 3 datasets 
 beta_reg_univariate <- function(dat,
                                 res = "propintraspecific_C",
@@ -288,6 +413,10 @@ sp_richness_C$models
 sp_richness_C$plot
 
 sp_richness_N <- beta_reg_univariate(SiteVar, res = "propintraspecific_N", exp = "site_nbspe_log")
+sp_richness_N$models
+sp_richness_N$plot
+
+sp_richness_N <- beta_reg_univariate(SiteVar, res = "propintraspecific_Total", exp = "site_nbspe_log")
 sp_richness_N$models
 sp_richness_N$plot
 
@@ -1448,7 +1577,7 @@ run_all_beta_model_sets <- function(dat,
                                     responses,
                                     drivers,
                                     richness = "site_nbspe_log_z_scored",
-                                    climate = "Climate_zone_e2",
+                                    climate = "Climate_zone_2cat",
                                     delta_cutoff = 2) {
   
   crossing(
@@ -1538,3 +1667,170 @@ coef_summary <- summarise_beta_model_coefficients(all_model_outputs)
 
 write.csv(coef_summary, "outputs/beta_regression_summary_table.csv", row.names = FALSE)
 
+
+
+coef_summary_mod5 <- coef_summary %>%
+  filter(model_name == "m5_exp_x_richness_noclimate")
+##function to make fig 
+plot_one_beta_prediction <- function(all_model_outputs,
+                                     response_choice,
+                                     driver_choice,
+                                     model_name,
+                                     richness = "site_nbspe_log_z_scored",
+                                     climate = "Climate_zone_2cat",
+                                     n_points = 100) {
+  
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+  
+  selected_row <- all_model_outputs %>%
+    select(selected) %>%
+    unnest(selected) %>%
+    mutate(driver = explanatory) %>%
+    filter(
+      response == response_choice,
+      driver == driver_choice
+    )
+  
+  if (nrow(selected_row) != 1) {
+    stop(
+      paste0(
+        "Expected exactly 1 row, but found ", nrow(selected_row),
+        ". Check response_choice and driver_choice."
+      )
+    )
+  }
+  
+  d <- selected_row$data[[1]]
+  models <- selected_row$models[[1]]
+  mod <- models[[model_name]]
+  
+  if (is.null(mod)) {
+    stop("Model name not found in this model list.")
+  }
+  
+  x_seq <- seq(
+    min(d[[driver_choice]], na.rm = TRUE),
+    max(d[[driver_choice]], na.rm = TRUE),
+    length.out = n_points
+  )
+  
+  newdat <- tibble(x_value = x_seq)
+  newdat[[driver_choice]] <- x_seq
+  
+  if (richness %in% all.vars(formula(mod))) {
+    newdat[[richness]] <- median(d[[richness]], na.rm = TRUE)
+  }
+  
+  if (climate %in% all.vars(formula(mod))) {
+    newdat[[climate]] <- names(sort(table(d[[climate]]), decreasing = TRUE))[1]
+  }
+  
+  newdat$pred <- predict(mod, newdata = newdat, type = "response")
+  
+  plot_df <- tibble(
+    x_value = d[[driver_choice]],
+    y_value = d[[response_choice]]
+  )
+  
+  ggplot(plot_df, aes(x = x_value, y = y_value)) +
+    geom_point(alpha = 0.35, size = 1.2) +
+    geom_line(
+      data = newdat,
+      aes(x = x_value, y = pred),
+      linewidth = 1.1, 
+      color = "black",
+      linetype = "dashed",
+    ) +
+    theme_classic() +
+    labs(
+      x = driver_choice,
+      y = "% CIV"
+    )
+}
+p1 <- plot_one_beta_prediction(
+  all_model_outputs = all_model_outputs,
+  response_choice = "propintraspecific_C",
+  driver_choice = "TP_z_scored",
+  model_name = "m5_exp_x_richness_noclimate"
+)
+
+p1
+
+p2 <- plot_one_beta_prediction(
+  all_model_outputs = all_model_outputs,
+  response_choice = "propintraspecific_N",
+  driver_choice = "TP_z_scored",
+  model_name = "m5_exp_x_richness_noclimate"
+)
+
+p2
+
+p3 <- plot_one_beta_prediction(
+  all_model_outputs = all_model_outputs,
+  response_choice = "propintraspecific_C",
+  driver_choice = "hft_z_scored",
+  model_name = "m5_exp_x_richness_noclimate"
+)
+
+p3
+
+p4 <- plot_one_beta_prediction(
+  all_model_outputs = all_model_outputs,
+  response_choice = "propintraspecific_N",
+  driver_choice = "hft_z_scored",
+  model_name = "m5_exp_x_richness_noclimate"
+)
+
+p4
+
+p5 <- plot_one_beta_prediction(
+  all_model_outputs = all_model_outputs,
+  response_choice = "propintraspecific_C",
+  driver_choice = "size_z_scored",
+  model_name = "m5_exp_x_richness_noclimate"
+)
+
+p5
+
+p6 <- plot_one_beta_prediction(
+  all_model_outputs = all_model_outputs,
+  response_choice = "propintraspecific_N",
+  driver_choice = "size_z_scored",
+  model_name = "m5_exp_x_richness_noclimate"
+)
+
+p6
+
+p7 <- plot_one_beta_prediction(
+  all_model_outputs = all_model_outputs,
+  response_choice = "propintraspecific_C",
+  driver_choice = "hydro_dis_z_scored",
+  model_name = "m5_exp_x_richness_noclimate"
+)
+
+p7
+
+p8 <- plot_one_beta_prediction(
+  all_model_outputs = all_model_outputs,
+  response_choice = "propintraspecific_N",
+  driver_choice = "hydro_dis_z_scored",
+  model_name = "m5_exp_x_richness_noclimate"
+)
+
+p8
+
+plot_env <- ggarrange(p1, p2, p3, p4, p5, p6, p7, p8, legend = "none", nrow = 4, ncol = 2, labels = c("a)", "b)", "c)", "d)", "e)", "f)", "g)", "h)"), font.label = list(colour = "black", size = 12))
+plot_env
+
+
+
+
+all_model_outputs %>%
+  select(selected) %>%
+  unnest(selected) %>%
+  slice(1) %>%
+  pull(models) %>%
+  .[[1]] %>%
+  names()
