@@ -52,6 +52,11 @@ col_pal<-c("darkgrey","deepskyblue1","deepskyblue2","deepskyblue3","darkolivegre
            "coral","coral2","brown1","brown2","brown3","goldenrod1","goldenrod2","goldenrod3")
 
 ## import/load datasets and prep them---------
+#read in fish data using -- selected sites based off cutoffs, only single year, taxonomic level resolved 
+source("scripts/0_fish_df_formation.R")  ##this is the data from selected cutoffs, single year, mixed taxonomy levels handled (from 0_fish_df_formation.R)
+rm(list = setdiff(ls(), "DataFish_final"))
+
+
 #load("../data/Env.RData") 
 load("data/Env_27Mar26.RData") 
 
@@ -66,64 +71,17 @@ mapview(Env_sf)
 
 
 
-#Load data and "normalize" d13C and d15N per site for same "baseline"
+#"normalize" d13C and d15N per site for same "baseline"
 ##per site: d13C_i=(d13C_i - d13C_min)/(d13C_max-d13C_min)
 ##per site: d15N_i=(d15N_i - d15N_min)/(d15N_max-d15N_min)
 
-#ALLindiv_June2025 <- read_excel("../data/ALLindiv_June2025.xlsx")
-#ALLindiv_June2025 <- read_excel("data/ALLindiv_June2025.xlsx")
-##ALLindiv_June2025 <- read_excel("ALLindiv_January2026.xlsx")
-
-df_all <- read_excel("data/FINAL_ALLindiv_February2026.xlsx") 
-
-
-##clean data
-##select only fish, where have C/N data and associated scientific name
-#DataFish<-subset(df_all,!is.na(d15N) & !is.na(d13C) & organism_type=="fish" & fish_species != "NA")
-##note: when we remove fish_species is NA we are removing any fish that are identified to only to genus or higher level - this can create false diversity and intravar. because we are removing individuals from different speceis from a community .. 
-
-##alternative way to retain taxonomic resolution variation -- new species column to use going forward then is fish_scientific_name
-DataFish <- df_all %>%
-  filter(!is.na(d15N) & !is.na(d13C) & organism_type=="fish") %>%
-  mutate(across(c(fish_species, fish_genus, fish_family, fish_order), ~ na_if(.x, "NA"))) %>%
-  mutate(fish_name_level = case_when(
-    !is.na(fish_species) ~ "species",
-    !is.na(fish_genus) ~ "genus",
-    !is.na(fish_family) ~ "family",
-    !is.na(fish_order) ~ "order"),
-    fish_scientific_name = coalesce(fish_species, fish_genus, fish_family, fish_order)) %>%
-  filter(!is.na(fish_scientific_name))
-
-
-
-##add species-site identifier column
-DataFish$sp_site<-paste(DataFish$fish_scientific_name,DataFish$collection_site_id,sep="_")
-##Assign 1 - number of fish
-DataFish$num<-1
-
-
 ##normalise data
-DataFish<-DataFish %>% 
-  mutate(year = str_extract(collection_date, "^\\d{4}") %>% as.numeric()) %>% ##create column of year
-  mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
-  group_by(site_year_code) %>% 
+DataFish_final<-DataFish_final %>% 
+  group_by(collection_site_id) %>% 
   mutate(d15N_norm = (d15N - min(d15N, na.rm = TRUE))/(max(d15N, na.rm = TRUE)-min(d15N, na.rm = TRUE)),
-          d13C_norm = (d13C - min(d13C, na.rm = TRUE))/(max(d13C, na.rm = TRUE)-min(d13C, na.rm = TRUE)))
+         d13C_norm = (d13C - min(d13C, na.rm = TRUE))/(max(d13C, na.rm = TRUE)-min(d13C, na.rm = TRUE)))
 
 
-##Read in cutoff site list, and then select the cutoff/criteria 
-cutoff_site_list_all <- read.csv("data/cuttoff_site_lists.csv")  
-
-
-cutoff_site_list <- cutoff_site_list_all %>%
-  mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
-  filter(min_sp_num == 2) %>% ##select minimum species number
-  filter(cutoff == "75pct") ##select cutoff 
-##453 sites 
-
-##select site/years from chosen cutoff 
-DataFish_final <- DataFish %>%
-  filter(site_year_code %in% cutoff_site_list$site_year_code)
 
 
 ##what, why are there 3 food webs without environmental data? 
@@ -169,7 +127,7 @@ test <- SpVar %>%
   select(collection_site_id) %>%
   group_by(collection_site_id) %>%
   count()
-#453 sites - so i think okay .. 
+#437 sites - so i think okay .. 
 
 
 ############################################################
