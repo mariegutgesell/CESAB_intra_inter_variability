@@ -23,6 +23,9 @@ SiteVar <- read.csv("data/SiteVar_2sp_75cutoff.csv") %>%
     startsWith(Climate_zone_e2, "Wa") ~"Warm/Hot",
   ))
 
+#fwb_climate <- SiteVar %>%
+#  select(FWB_id, Climate_zone_2cat)
+#write.csv(fwb_climate, "data/fwb_climate_list.csv")
 ##C:N ratio -- look for effect especially in muscle, but may not be available 
 
 ##also looking for relationships between site environmental variables and community characteristic (e.g., species richness, functional diversity, )
@@ -52,7 +55,7 @@ SiteVar <- read.csv("data/SiteVar_2sp_75cutoff.csv") %>%
 #convert points to sf objects and make base world map
 sites_coord <- st_as_sf(SiteVar, coords = c("collection_decimal_longitude", "collection_decimal_latitude"), crs = 4326)  %>%
   st_make_valid() %>%
-  st_transform(4326)
+  st_transform(4326) 
 
 countries <- ne_countries(scale = "medium", returnclass = "sf") %>%
  # st_make_valid() %>%
@@ -79,7 +82,7 @@ test <- sites_geo %>%
   filter(is.na(continent))
 
 sites_geo <- sites_geo %>%
-  select(collection_site_id, waterbody_type, Climate_zone_2cat,  country, continent, propintraspecific_N, propintraspecific_C, propintraspecific_Total) %>%
+  select(collection_site_id, waterbody_type, Climate_zone_2cat,  country, continent, site_nbspe, propintraspecific_N, propintraspecific_C, propintraspecific_Total) %>%
   pivot_longer(cols= c(propintraspecific_N, propintraspecific_C, propintraspecific_Total), names_to = "prop_intraspecific_var_type", values_to = "prop_intraspecific_var") %>%
   mutate(prop_type = case_when(
     startsWith("propintraspecific_N", prop_intraspecific_var_type) ~ "N",
@@ -99,96 +102,56 @@ sites_r <- st_transform(sites_coord, crs_robin)
 
 p_map <- ggplot() +
   geom_sf(data = world_r, fill = "lightgrey", color = "darkgrey", linewidth = 0.1) +
-  geom_sf(data = sites_r, size = 1, alpha = 0.9) +
+  geom_sf(data = sites_r, aes(fill = Climate_zone_2cat), color = "black", shape = 21, size = 1, alpha = 0.9) +
   coord_sf(expand = FALSE) +
+  scale_color_manual(values = c("#99CCCC", "#993333"))+
   # annotation_scale(location = "bl", width_hint = 0.25) +
   #  annotation_north_arrow(location = "bl", which_north = "true",
   #                        style = north_arrow_fancy_orienteering) +
   theme_void() +
   theme(
     # plot.margin = margin(5, 5, 5, 5),
-    legend.position = "none"
+    legend.position = "right"
   ) +
   theme(plot.background = element_rect(fill = "white", color = NA))
 
 p_map
 
-##something is wrong with the lat/longs here...have some points in the middle of the ocean 
-##could add something for species richness and 
+p_map_2 <- ggplot() +
+  geom_sf(data = world_r, fill = "lightgrey", color = "darkgrey", linewidth = 0.1) +
+  geom_sf(data = sites_r, aes(color = Climate_zone_e2),size = 1, alpha = 0.9) +
+  coord_sf(expand = FALSE) +
+#  scale_color_manual(values = c("#4C72B0", "#DD8452"))+
+  # annotation_scale(location = "bl", width_hint = 0.25) +
+  #  annotation_north_arrow(location = "bl", which_north = "true",
+  #                        style = north_arrow_fancy_orienteering) +
+  theme_void() +
+  theme(
+    # plot.margin = margin(5, 5, 5, 5),
+    legend.position = "right"
+  ) +
+  theme(plot.background = element_rect(fill = "white", color = NA))
 
-#ggsave("sites_global_map.pdf", p, width = 7.0, height = 4.2, units = "in")
-#ggsave("sites_global_map.png", p, width = 7.0, height = 4.2, units = "in", dpi = 600)
+p_map_2
 
-
-##could be cool for each continent, to have a boxplot and then put that on the map 
-make_box <- function(dat_ct, title = NULL) {
-  ggplot(dat_ct, aes(x = prop_type, y = prop_intraspecific_var, fill = prop_type)) +
-    geom_boxplot(width = 0.7, outlier.size = 0.6) +
-    labs(title = title, x = NULL, y = "% CIV") +
-    scale_fill_manual(values = c("darkgrey", "white")) +
-    # theme_minimal(base_size = 9) +
-    theme_classic()+
-    theme(
-      legend.position = "none",
-      plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
-      axis.text.x = element_text(size = 8),
-      axis.text.y = element_text(size = 8),
-      axis.title.y = element_text(size = 8),
-      panel.grid.minor = element_blank(),
-      
-      ## KEY: Make both backgrounds transparent
-      panel.background = element_rect(fill = "transparent", color = NA),
-      plot.background  = element_rect(fill = "transparent", color = NA)
-    ) +
-    ylim(0,1)
-}
-
-"Relative Contribution to \nIntraspecific Variability"
-
-continents <- c("North America","South America","Europe","Africa","Asia","Oceania")
-
-boxplots <- lapply(continents, function(ct) {
-  dat_ct <- sites_geo |> st_drop_geometry() |> filter(continent == ct)
-  make_box(dat_ct)
-})
-names(boxplots) <- continents
-##try putting boxplots on the map
-positions <- tibble::tribble(
-  ~continent,        ~x,   ~y,   ~w,   ~h,
-  "North America",   0.05, 0.58, 0.14, 0.18,
-  "South America",   0.17, 0.33, 0.14, 0.18,
-  "Europe",          0.35, 0.61, 0.14, 0.18,
-  "Africa",          0.41, 0.33, 0.14, 0.18,
-  "Asia",            0.63, 0.53, 0.14, 0.18,
-  "Oceania",         0.70, 0.26, 0.14, 0.18
-)
-
-p_final <- ggdraw(p_map)
-
-for (i in seq_len(nrow(positions))) {
-  ct <- positions$continent[i]
-  p_final <- p_final +
-    draw_plot(
-      boxplots[[ct]],
-      x = positions$x[i], y = positions$y[i],
-      width = positions$w[i], height = positions$h[i]
-    )
-}
-
-p_final
 
 
 
 ##Brief descriptive stats ----------------
+site_var_env <- SiteVar %>%
+  select(FWB_id, waterbody_type, Climate_zone_2cat)
 ##Number of communities -- 453 (# of sites) --455
 ##Number of species:
-SpVar <- read.csv("data/SpVar_2sp_75cutoff.csv") 
-sp_num <- SpVar %>%
-  select(fish_species) %>%
-  distinct()
-fam_num <- SpVar %>%
-  select(fish_family) %>%
-  distinct()
+SpVar <- read.csv("data/SpVar_2sp_75cutoff.csv") %>%
+  left_join(site_var_env, by = "FWB_id")
+
+
+##climate by category
+clim_cat <- SpVar %>%
+  select(fish_scientific_name, Climate_zone_2cat) %>%
+  distinct() %>%
+  group_by(fish_scientific_name) %>%
+  count()
 
 ##Number of countries:
 country_num <- as.data.frame(sites_geo) %>%
@@ -196,7 +159,37 @@ country_num <- as.data.frame(sites_geo) %>%
   ungroup() %>%
   distinct()
 
+##MODEL:
+##glmm w/ ecosystem type, climate 
 
+##Looking at relationship between species richness and variance within certain species
+##salmo trutta , pike, roach, carp? 
+sp_var_sp_interest <- SpVar %>%
+  left_join(SiteVar %>% select(FWB_id, site_nbspe), by = "FWB_id") %>%
+  filter(fish_scientific_name %in% c("Salmo trutta", "Esox lucius", "Rutilus rutilus", "Cyprinus carpio"))
+
+ggplot(sp_var_sp_interest, aes(x = site_nbspe, y = sp_site_var_C, color = log(sp_site_num_ind))) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+  facet_wrap(~fish_scientific_name, scale = "free")
+ggplot(sp_var_sp_interest, aes(x = site_nbspe, y = sp_site_var_N, color = log(sp_site_num_ind))) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+  facet_wrap(~fish_scientific_name, scale = "free")
+
+ggplot(sp_var_sp_interest, aes(x = sp_site_body_size_range, y = sp_site_var_C)) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+  facet_wrap(~fish_scientific_name, scale = "free")
+
+ggplot(sp_var_sp_interest, aes(x = sp_site_body_size_range, y = sp_site_var_N)) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+  facet_wrap(~fish_scientific_name, scale = "free")
+
+ggplot(sp_var_sp_interest, aes(x = sp_site_var_length, y = sp_site_var_C)) +
+  geom_point() +
+  facet_wrap(~fish_scientific_name, scale = "free")
 ##Mean richness:
 mean_rich <- SiteVar %>%
   summarise(mean_richness = mean(site_nbspe),
@@ -238,10 +231,10 @@ continents_aov_2 <- aov(prop_intraspecific_var ~ prop_intraspecific_var_type * c
 continents_aov_2
 TukeyHSD(continents_aov_2)
 ##Regression and ANOVA for sp richness, habitat and climate
-c_rich_lm <- lm(propintraspecific_C ~ site_nbspe, data = SiteVar)
+c_rich_lm <- lm(propintraspecific_C ~ log(site_nbspe), data = SiteVar)
 summary(c_rich_lm)
 
-n_rich_lm <- lm(propintraspecific_N ~ site_nbspe, data = SiteVar)
+n_rich_lm <- lm(propintraspecific_N ~ log(site_nbspe), data = SiteVar)
 summary(n_rich_lm)
 
 c_hab_aov <- aov(propintraspecific_C ~ Type, data = SiteVar)
@@ -275,42 +268,115 @@ hist_C_intra
 
 ##comparing variation in proportion 
 
-color1 <- c("white", "darkgrey")
+color1 <- c("darkgrey", "black")
 
 box_c_n_cn <- sites_geo %>%
   ggplot(aes(x = prop_type, y = prop_intraspecific_var)) +
   geom_boxplot() +
-  scale_fill_manual(values = color1)+
+#  scale_fill_manual(values = color1)+
   theme_classic() +
-  ylab("% CIV") +
+  ylab("CIV Proportion") +
   theme(axis.title.x = element_blank())
 box_c_n_cn
 
 box_c_n_habitat <- sites_geo %>%
+ # filter(prop_type != "Total") %>%
   ggplot(aes(x = prop_type, y = prop_intraspecific_var, fill = waterbody_type)) +
   geom_boxplot() +
   scale_fill_manual(values = color1)+
   theme_classic() +
-  ylab("% CIV") +
+  ylab("CIV Proportion") +
   theme(axis.title.x = element_blank())
 
 box_c_n_habitat
 
+##show just C and N -- run everything with all 3 for the total, then put in the methods that it is basically averaging between the two 
+
+box_c_n_habitat_sprich_C <- sites_geo %>%
+   filter(prop_type == "C") %>%
+  ggplot(aes(x = log(site_nbspe), y = prop_intraspecific_var,  color = waterbody_type)) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+  scale_color_manual(values = color1)+
+  theme_classic() +
+  ylab("CIV Proportion C") +
+  theme(axis.title.x = element_blank())
+box_c_n_habitat_sprich_C
+
+box_c_n_habitat_sprich_N <- sites_geo %>%
+  filter(prop_type == "N") %>%
+  ggplot(aes(x = log(site_nbspe), y = prop_intraspecific_var,  color = waterbody_type)) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+  scale_color_manual(values = color1)+
+  theme_classic() +
+  ylab("CIV Proportion N") +
+  theme(axis.title.x = element_blank())
+box_c_n_habitat_sprich_N
+
+box_c_n_habitat_sprich_N <- sites_geo %>%
+  filter(prop_type == "N") %>%
+  ggplot(aes(x = as.factor(site_nbspe), y = prop_intraspecific_var,  fill = waterbody_type)) +
+  geom_boxplot() +
+  scale_fill_manual(values = color1)+
+  theme_classic() +
+  ylab("CIV Proportion N") +
+  theme(axis.title.x = element_blank())
+box_c_n_habitat_sprich_N
+
+
 
 color2 <- c("lightblue", "red")
 box_climate <- sites_geo %>%
+ # filter(prop_type != "Total") %>%
   ggplot(aes(x = prop_type, y = prop_intraspecific_var, fill = Climate_zone_2cat)) +
   geom_boxplot() +
   scale_fill_manual(values = color2)+
   theme_classic() +
-  ylab("% CIV") +
+  ylab("CIV Proportion") +
   theme(axis.title.x = element_blank())
 
 box_climate
 
+box_c_n_climate_sprich_C <- sites_geo %>%
+  filter(prop_type == "C") %>%
+  ggplot(aes(x = log(site_nbspe), y = prop_intraspecific_var,  color = Climate_zone_2cat)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  scale_fill_manual(values = color1)+
+  theme_classic() +
+  ylab("CIV Proportion C") +
+  theme(axis.title.x = element_blank())
+box_c_n_climate_sprich_C
 
-plot_sup <- ggarrange(box_c_n_habitat, box_climate, legend = "bottom", nrow = 1, ncol = 2, labels = c("a)", "b)"), font.label = list(colour = "black", size = 12))
+box_c_n_climate_sprich_N <- sites_geo %>%
+  filter(prop_type == "N") %>%
+  ggplot(aes(x = log(site_nbspe), y = prop_intraspecific_var,  color = Climate_zone_2cat)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  scale_color_manual(values = color1)+
+  theme_classic() +
+  ylab("CIV Proportion N") +
+  theme(axis.title.x = element_blank())
+box_c_n_climate_sprich_N
+
+sp_rich_reg <- sites_geo %>%
+ # filter(prop_type != "Total") %>%
+  ggplot(aes(x = log(site_nbspe), y = prop_intraspecific_var, color = prop_type)) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+#  scale_color_manual(values = color1)+
+  theme_classic() +
+  ylab("CIV Proportion") +
+  xlab("Species Richness (log)")
+ # theme(axis.title.x = element_blank())
+sp_rich_reg
+
+
+plot_sup <- ggarrange(box_c_n_cn, box_c_n_habitat, box_climate, sp_rich_reg, legend = "bottom", nrow = 2, ncol = 2, labels = c("a)", "b)", "c)", "d)"), font.label = list(colour = "black", size = 12))
 plot_sup
+
+glmm1 <- g
 
 
 cn_correlation <- ggplot(SiteVar, aes(x = propintraspecific_C, y = propintraspecific_N)) +
