@@ -182,7 +182,7 @@ nd_C$prediction1 <- predict(glmm5_C, newdata = nd_C, type = "response")
 
 c_site <- ggplot() +
   geom_point(data = SiteVar, aes(x = site_nbspe_log, y = propintraspecific_C, color= Climate_zone_2cat) ) +
-  scale_color_manual(values = c("#99CCCC","#993333" )) + 
+  scale_color_manual(name = "Climate zone", values = c("#99CCCC","#993333" )) + 
   geom_line(data = nd_C, aes(x = site_nbspe_log, y = prediction1), color = "black")+
  # geom_abline(slope = -0.44131, intercept =  0.83235 , color = "black", linewidth = 2) +
   theme_classic() +
@@ -240,8 +240,8 @@ nd_N <- datagrid(site_nbspe_log = seq(0.5, 4, 0.1), Climate_zone_2cat = c("Cold/
 nd_N$prediction1 <- predict(glmm8_N, newdata = nd_N, type = "response")
 
 n_site <- ggplot() +
-  geom_point(data = SiteVar, aes(x = site_nbspe_log, y = propintraspecific_C, color= Climate_zone_2cat) ) +
-  scale_color_manual(values = c("#99CCCC","#993333" )) + 
+  geom_point(data = SiteVar, aes(x = site_nbspe_log, y = propintraspecific_N, color= Climate_zone_2cat) ) +
+  scale_color_manual(name = "Climate zone", values = c("#99CCCC","#993333" )) + 
   geom_line(data = nd_N, aes(x = site_nbspe_log, y = prediction1, group = Climate_zone_2cat, color = Climate_zone_2cat))+
 #  scale_color_manual(values = c("#99CCCC","#993333" )) + 
   # geom_abline(slope = -0.44131, intercept =  0.83235 , color = "black", linewidth = 2) +

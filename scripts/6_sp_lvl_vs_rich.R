@@ -53,25 +53,25 @@ SpVar <- read.csv("data/SpVar_2sp_75cutoff.csv") %>%
 
 ##habitat
 sp_habitat_list <- SpVar %>%
-  select(waterbody_type.x, fish_species) %>%
-  distinct() #%>%
-  group_by(fish_species) %>%
+  select(waterbody_type.x, fish_scientific_name) %>%
+  distinct() %>%
+  group_by(fish_scientific_name) %>%
   count()
 ###look at the species and number of species across sampling sites and climate 
 sp_climate_list <- SpVar %>%
-  select(Climate_zone_2cat, fish_species, FWB_id) %>%
+  select(Climate_zone_2cat, fish_scientific_name, FWB_id) %>%
   distinct() %>%
-  group_by(Climate_zone_2cat, fish_species) %>%
+  group_by(Climate_zone_2cat, fish_scientific_name) %>%
   count() %>%
   rename(num_fw_present = "n")
 
 ##select only species with a single climate zone
 single_sp_climate <- sp_climate_list %>%
-  select(Climate_zone_2cat, fish_species) %>%
-  group_by(fish_species) %>%
+  select(Climate_zone_2cat, fish_scientific_name) %>%
+  group_by(fish_scientific_name) %>%
   count() %>%
   filter(n == 1) %>%
-  left_join(sp_climate_list, by = "fish_species")
+  left_join(sp_climate_list, by = "fish_scientific_name")
 
 
 
@@ -82,14 +82,14 @@ sp_interest_list <- single_sp_climate %>%
 ##Looking at relationship between species richness and variance within certain species
 ##salmo trutta , pike, roach, carp? 
 sp_var_sp_interest <- SpVar %>%
-  filter(fish_species %in% sp_interest_list$fish_species)  %>%
+  filter(fish_scientific_name %in% sp_interest_list$fish_scientific_name)  %>%
   mutate(site_nbspe_log = log(site_nbspe),
          site_nbspe_log_scale = scale(site_nbspe_log),
          sp_site_var_C_log = log(sp_site_var_C),
          sp_site_var_N_log = log(sp_site_var_N),
          )
 sp_habitat_list <- sp_var_sp_interest %>%
-  select(waterbody_type.x, Climate_zone_2cat, fish_species) %>%
+  select(waterbody_type.x, Climate_zone_2cat, fish_scientific_name) %>%
   distinct() #%>%
 
 clim_hab_num <- sp_habitat_list %>%
@@ -97,7 +97,7 @@ clim_hab_num <- sp_habitat_list %>%
   group_by(Climate_zone_2cat, waterbody_type.x) %>%
   count()
 
-group_by(fish_species) %>%
+group_by(fish_scientific_name) %>%
   count()
 
 
@@ -107,37 +107,47 @@ hist(sp_var_sp_interest$sp_site_var_N)
 hist(sp_var_sp_interest$sp_site_var_N_log)
 
 test <- sp_var_sp_interest %>%
-  filter(fish_species == "Amniataba percoides")
+  filter(fish_scientific_name == "Amniataba percoides")
 
 num_sp <- sp_var_sp_interest %>%
-  select(fish_species, Climate_zone_2cat) %>%
+  select(fish_scientific_name, Climate_zone_2cat) %>%
   distinct() %>%
   group_by(Climate_zone_2cat) %>%
   count()
 
-ggplot(sp_var_sp_interest, aes(x = log(site_nbspe), y = sp_site_var_C, group = fish_species, color = Climate_zone_2cat)) +
+ggplot(sp_var_sp_interest, aes(x = log(site_nbspe), y = sp_site_var_C, group = fish_scientific_name, color = Climate_zone_2cat)) +
   geom_point() +
   geom_smooth(method = "lm")
 
-glmm1_C <- glmmTMB(sp_site_var_C_log ~ site_nbspe_log_scale * Climate_zone_2cat + (site_nbspe_log_scale|fish_species), data = sp_var_sp_interest)
+glmm1_C <- glmmTMB(sp_site_var_C_log ~ site_nbspe_log_scale * Climate_zone_2cat + (site_nbspe_log_scale|fish_scientific_name), data = sp_var_sp_interest)
 summary(glmm1_C)
 Anova(glmm1_C)
 diagnose(glmm1_C)
 simulationOutput <- simulateResiduals(fittedModel = glmm1_C, plot = FALSE)
 plot(simulationOutput)
 
-nd_C_cold <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Cold/Cool"), fish_species = unique(sp_cold$fish_species), model = glmm1_C)
+sp_cold <- sp_var_sp_interest %>%
+  select(fish_scientific_name, Climate_zone_2cat) %>%
+  distinct() %>%
+  filter(Climate_zone_2cat == "Cold/Cool")
+sp_warm <- sp_var_sp_interest %>%
+  select(fish_scientific_name, Climate_zone_2cat) %>%
+  distinct() %>%
+  filter(Climate_zone_2cat == "Warm/Hot")
+
+
+nd_C_cold <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Cold/Cool"), fish_scientific_name = unique(sp_cold$fish_scientific_name), model = glmm1_C)
 nd_C_cold$prediction1 <- predict(glmm1_C, newdata = nd_C_cold)
 
-nd_C_warm <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Warm/Hot"), fish_species = unique(sp_warm$fish_species), model = glmm1_C)
+nd_C_warm <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Warm/Hot"), fish_scientific_name = unique(sp_warm$fish_scientific_name), model = glmm1_C)
 nd_C_warm$prediction1 <- predict(glmm1_C, newdata = nd_C_warm)
 
 #nd_N_fix <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Cold/Cool", "Warm/Hot"),  model = glmm1_N)
 #nd_N_fix$prediction1 <- predict(glmm1_N, newdata = nd_N_fix)
 
 c_sp <- ggplot() +
-  geom_line(data = nd_C_cold,aes( x = site_nbspe_log_scale, y = prediction1, group = fish_species ), color = "#99CCCC", alpha = 0.7) +
-  geom_line(data = nd_C_warm,aes( x = site_nbspe_log_scale, y = prediction1, group = fish_species ), color = "#993333", alpha = 0.7) +
+  geom_line(data = nd_C_cold,aes( x = site_nbspe_log_scale, y = prediction1, group = fish_scientific_name ), color = "#99CCCC", alpha = 0.7) +
+  geom_line(data = nd_C_warm,aes( x = site_nbspe_log_scale, y = prediction1, group = fish_scientific_name ), color = "#993333", alpha = 0.7) +
   # geom_line(data = nd_N_fix,aes( x = site_nbspe_log_scale, y = prediction1, group = Climate_zone_2cat, color = Climate_zone_2cat), linewidth = 2)+
   geom_abline(slope = -0.41131, intercept =  -4.05148, color = "#99CCCC", linewidth = 2) +
   geom_abline(slope = -0.41131 -0.03275 , intercept = -4.05148 + 0.14264, color = "#993333", linewidth = 2) +
@@ -150,7 +160,7 @@ c_sp
 ##need to add the confidence interval to the fixed effect lines
 #DHARMa::residuals(simulationOutput)
 
-glmm1_N <- glmmTMB(sp_site_var_N_log ~ site_nbspe_log_scale * Climate_zone_2cat + (site_nbspe_log_scale|fish_species), data = sp_var_sp_interest)
+glmm1_N <- glmmTMB(sp_site_var_N_log ~ site_nbspe_log_scale * Climate_zone_2cat + (site_nbspe_log_scale|fish_scientific_name), data = sp_var_sp_interest)
 summary(glmm1_N)
 Anova(glmm1_N)
 ranef(glmm1_N)
@@ -163,27 +173,20 @@ min(sp_var_sp_interest$site_nbspe_log_scale)
 
 max(sp_var_sp_interest$site_nbspe_log_scale)
 
-sp_cold <- sp_var_sp_interest %>%
-  select(fish_species, Climate_zone_2cat) %>%
-  distinct() %>%
-  filter(Climate_zone_2cat == "Cold/Cool")
-sp_warm <- sp_var_sp_interest %>%
-  select(fish_species, Climate_zone_2cat) %>%
-  distinct() %>%
-  filter(Climate_zone_2cat == "Warm/Hot")
 
-nd_N_cold <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Cold/Cool"), fish_species = unique(sp_cold$fish_species), model = glmm1_N)
+
+nd_N_cold <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Cold/Cool"), fish_scientific_name = unique(sp_cold$fish_scientific_name), model = glmm1_N)
 nd_N_cold$prediction1 <- predict(glmm1_N, newdata = nd_N_cold)
 
-nd_N_warm <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Warm/Hot"), fish_species = unique(sp_warm$fish_species), model = glmm1_N)
+nd_N_warm <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Warm/Hot"), fish_scientific_name = unique(sp_warm$fish_scientific_name), model = glmm1_N)
 nd_N_warm$prediction1 <- predict(glmm1_N, newdata = nd_N_warm)
 
 nd_N_fix <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Cold/Cool", "Warm/Hot"),  model = glmm1_N)
 nd_N_fix$prediction1 <- predict(glmm1_N, newdata = nd_N_fix)
 
 n_sp <- ggplot() +
-  geom_line(data = nd_N_cold,aes( x = site_nbspe_log_scale, y = prediction1, group = fish_species ), color = "#99CCCC", alpha = 0.7) +
-  geom_line(data = nd_N_warm,aes( x = site_nbspe_log_scale, y = prediction1, group = fish_species ), color = "#993333", alpha = 0.7) +
+  geom_line(data = nd_N_cold,aes( x = site_nbspe_log_scale, y = prediction1, group = fish_scientific_name ), color = "#99CCCC", alpha = 0.7) +
+  geom_line(data = nd_N_warm,aes( x = site_nbspe_log_scale, y = prediction1, group = fish_scientific_name ), color = "#993333", alpha = 0.7) +
  # geom_line(data = nd_N_fix,aes( x = site_nbspe_log_scale, y = prediction1, group = Climate_zone_2cat, color = Climate_zone_2cat), linewidth = 2)+
   geom_abline(slope = -0.7438, intercept = -4.4769, color = "#99CCCC", linewidth = 2) +
   geom_abline(slope = -0.7438 +  0.4380, intercept = -4.4769 + 0.3614, color = "#993333", linewidth = 2) +
