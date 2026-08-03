@@ -102,9 +102,9 @@ sites_r <- st_transform(sites_coord, crs_robin)
 
 p_map <- ggplot() +
   geom_sf(data = world_r, fill = "lightgrey", color = "darkgrey", linewidth = 0.1) +
-  geom_sf(data = sites_r, aes(fill = Climate_zone_2cat), color = "black", shape = 21, size = 1, alpha = 0.9) +
+  geom_sf(data = sites_r, aes(fill = Climate_zone_2cat), color = "black", shape = 21, size = 1.5, alpha = 0.9) +
   coord_sf(expand = FALSE) +
-  scale_color_manual(values = c("#99CCCC", "#993333"))+
+  scale_fill_manual(name = "Climate zone", values = c("#99CCCC", "#993333"))+
   # annotation_scale(location = "bl", width_hint = 0.25) +
   #  annotation_north_arrow(location = "bl", which_north = "true",
   #                        style = north_arrow_fancy_orienteering) +
@@ -425,6 +425,9 @@ SiteVar %>%
 ggplot(aes(x = log(site_mean_sample_id), y = propintraspecific_C)) +
   geom_point() +
   geom_smooth(method = "lm")
+
+
+
 
 ggplot(SiteVar, aes(x = log(site_mean_sample_id), y = propintraspecific_N)) +
   geom_point() +
