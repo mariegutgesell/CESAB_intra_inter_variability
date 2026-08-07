@@ -256,6 +256,12 @@ julien_site_sorting <- read_excel("data/Sites_Julien_27.07.2026.xlsx") %>%
   distinct(FWB_id, .keep_all = TRUE)
 head(julien_site_sorting)
 
+##number of sites with mixed taxonomy levels that were included
+julien_site_sorting %>%
+  filter(Use == "YES") %>%
+  select(FWB_id) %>%
+  distinct() %>%
+  count()
 
 actions <- julien_site_sorting %>% 
   select(Action_description) %>%
@@ -303,6 +309,50 @@ DataFish_final <- DataFish_2 %>%
     ))
   
 
+
+
+##Calculate the proporton of total individuals in a food web that the species with less than 3 replicates make up (i.e., calculating rare species)
+##Okay so -- current cutoff, 2 species, 75% -- for those 25% w/ less than 3 replicates, what proportion of total number of individuals in that food web are they ? 
+
+cutoff_site_list_25 <- cutoff_site_list %>%
+  filter(min_num_ind_per_sample < 3)
+
+datafish_25 <- DataFish_final %>%
+  mutate(site_year_code = paste(FWB_id, year, sep = "_")) %>%
+  filter(site_year_code %in% cutoff_site_list_25$site_year_code)
+
+
+datafish_25_total <- datafish_25 %>%
+  group_by(site_year_code) %>%
+  count() %>%
+  rename(num_ind_total = "n")
+
+
+datafish_25_sp_total <- datafish_25 %>%
+  group_by(site_year_code, fish_scientific_name) %>%
+  count() %>%
+  rename(num_ind_per_species = "n") %>%
+  left_join(datafish_25_total, by = "site_year_code") %>%
+  mutate(percent_total_ind = num_ind_per_species/num_ind_total*100)
+
+
+
+rare_sp <- datafish_25_sp_total %>%
+  filter(num_ind_per_species < 3)
+
+rare_sp_mean <- rare_sp %>%
+  ungroup() %>%
+  summarise(mean_percent_total_ind = mean(percent_total_ind),
+            sd_percent_total_ind = sd(percent_total_ind))
+
+ggplot(rare_sp, aes(x = percent_total_ind)) +
+  geom_histogram()
+
+rare_sp %>%
+  group_by(site_year_code) %>%
+  summarise(percent_total_ind_sum = sum(percent_total_ind)) %>%
+  ggplot(aes(x = percent_total_ind_sum)) +
+  geom_histogram()
 
 
 
