@@ -47,7 +47,22 @@ site_var_env <- SiteVar %>%
 SpVar <- read.csv("data/SpVar_2sp_75cutoff.csv") %>%
   left_join(site_var_env, by = "FWB_id")
 
+test <- SpVar %>%
+ # filter(fish_name_level == "species") %>%
+  select(fish_scientific_name, fish_name_level) %>%
+  group_by(fish_scientific_name) %>%
+  count() %>%
+  filter(n >1)
+  distinct()
 
+
+test %>%
+  summarise(
+    unique_taxa = n_distinct(fish_scientific_name),
+    unique_species = n_distinct(
+      fish_scientific_name[fish_name_level == "species"]
+    )
+  )
 ##can test for species that are in both -- do they have the different slopes when found in different climates ? 
 ##do we have fish that we select for this from both lentic and lotic sites? 
 
@@ -119,7 +134,7 @@ ggplot(sp_var_sp_interest, aes(x = log(site_nbspe), y = sp_site_var_C, group = f
   geom_point() +
   geom_smooth(method = "lm")
 
-glmm1_C <- glmmTMB(sp_site_var_C_log ~ site_nbspe_log_scale * Climate_zone_2cat + (site_nbspe_log_scale|fish_scientific_name), data = sp_var_sp_interest)
+glmm1_C <- glmmTMB(sp_site_var_C_log ~ site_nbspe_log_scale * Climate_zone_2cat + waterbody_type.x + (site_nbspe_log_scale|fish_scientific_name), data = sp_var_sp_interest)
 summary(glmm1_C)
 Anova(glmm1_C)
 diagnose(glmm1_C)
@@ -136,10 +151,26 @@ sp_warm <- sp_var_sp_interest %>%
   filter(Climate_zone_2cat == "Warm/Hot")
 
 
-nd_C_cold <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Cold/Cool"), fish_scientific_name = unique(sp_cold$fish_scientific_name), model = glmm1_C)
+nd_C_fix <- expand.grid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Cold/Cool", "Warm/Hot"), waterbody_type.x = "lotic")
+nd_C_fix$fish_scientific_name <- sp_var_sp_interest$fish_scientific_name[1]
+# Population-level predictions (exclude random effects)
+pred_C <- predict(glmm1_C, newdata = nd_C_fix, re.form = NA,se.fit = TRUE)
+
+nd_C_fix <- nd_C_fix %>%
+  mutate(
+    prediction = pred_C$fit,
+    se = pred_C$se.fit,
+    lower = prediction - 1.96 * se,
+    upper = prediction + 1.96 * se
+  )
+#nd_C_fix$prediction1 <- predict(glmm1_N, newdata = nd_N_fix)
+
+
+
+nd_C_cold <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Cold/Cool"),waterbody_type.x = "lotic", fish_scientific_name = unique(sp_cold$fish_scientific_name), model = glmm1_C)
 nd_C_cold$prediction1 <- predict(glmm1_C, newdata = nd_C_cold)
 
-nd_C_warm <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Warm/Hot"), fish_scientific_name = unique(sp_warm$fish_scientific_name), model = glmm1_C)
+nd_C_warm <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Warm/Hot"),waterbody_type.x = "lotic",  fish_scientific_name = unique(sp_warm$fish_scientific_name), model = glmm1_C)
 nd_C_warm$prediction1 <- predict(glmm1_C, newdata = nd_C_warm)
 
 #nd_N_fix <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Cold/Cool", "Warm/Hot"),  model = glmm1_N)
@@ -148,19 +179,22 @@ nd_C_warm$prediction1 <- predict(glmm1_C, newdata = nd_C_warm)
 c_sp <- ggplot() +
   geom_line(data = nd_C_cold,aes( x = site_nbspe_log_scale, y = prediction1, group = fish_scientific_name ), color = "#99CCCC", alpha = 0.7) +
   geom_line(data = nd_C_warm,aes( x = site_nbspe_log_scale, y = prediction1, group = fish_scientific_name ), color = "#993333", alpha = 0.7) +
-  # geom_line(data = nd_N_fix,aes( x = site_nbspe_log_scale, y = prediction1, group = Climate_zone_2cat, color = Climate_zone_2cat), linewidth = 2)+
-  geom_abline(slope = -0.41131, intercept =  -4.05148, color = "#99CCCC", linewidth = 2) +
-  geom_abline(slope = -0.41131 -0.03275 , intercept = -4.05148 + 0.14264, color = "#993333", linewidth = 2) +
-  #  scale_color_manual(values = c("#99CCCC", "#993333")) +
+  geom_ribbon(data = nd_C_fix, aes(x = site_nbspe_log_scale, ymin = lower, ymax = upper, fill = Climate_zone_2cat), alpha = 0.4)+
+   geom_line(data = nd_C_fix,aes( x = site_nbspe_log_scale, y = prediction, group = Climate_zone_2cat, color = Climate_zone_2cat), linewidth = 2)+
+  #geom_abline(slope = -0.41131, intercept =  -4.05148, color = "#99CCCC", linewidth = 2) +
+  #geom_abline(slope = -0.41131 -0.03275 , intercept = -4.05148 + 0.14264, color = "#993333", linewidth = 2) +
+  scale_color_manual(name = "Climate zone", values = c("Cold/Cool" = "#99CCCC","Warm/Hot" = "#993333")) +
+  scale_fill_manual(name = "Climate zone", values = c("Cold/Cool" = "#99CCCC","Warm/Hot" = "#993333")) +
   theme_classic() +
   xlab("Species Richness (log scaled)") +
-  ylab("Intraspecific Variance in C (log)")
+  ylab("Intraspecific Variance in C (log)") +
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size = 16))
 c_sp
 
 ##need to add the confidence interval to the fixed effect lines
 #DHARMa::residuals(simulationOutput)
 
-glmm1_N <- glmmTMB(sp_site_var_N_log ~ site_nbspe_log_scale * Climate_zone_2cat + (site_nbspe_log_scale|fish_scientific_name), data = sp_var_sp_interest)
+glmm1_N <- glmmTMB(sp_site_var_N_log ~ site_nbspe_log_scale * Climate_zone_2cat +  waterbody_type.x + (site_nbspe_log_scale|fish_scientific_name), data = sp_var_sp_interest)
 summary(glmm1_N)
 Anova(glmm1_N)
 ranef(glmm1_N)
@@ -175,25 +209,45 @@ max(sp_var_sp_interest$site_nbspe_log_scale)
 
 
 
-nd_N_cold <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Cold/Cool"), fish_scientific_name = unique(sp_cold$fish_scientific_name), model = glmm1_N)
+nd_N_cold <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Cold/Cool"),waterbody_type.x = "lotic",  fish_scientific_name = unique(sp_cold$fish_scientific_name), model = glmm1_N)
 nd_N_cold$prediction1 <- predict(glmm1_N, newdata = nd_N_cold)
 
-nd_N_warm <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Warm/Hot"), fish_scientific_name = unique(sp_warm$fish_scientific_name), model = glmm1_N)
+nd_N_warm <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Warm/Hot"),waterbody_type.x = "lotic",  fish_scientific_name = unique(sp_warm$fish_scientific_name), model = glmm1_N)
 nd_N_warm$prediction1 <- predict(glmm1_N, newdata = nd_N_warm)
 
-nd_N_fix <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Cold/Cool", "Warm/Hot"),  model = glmm1_N)
-nd_N_fix$prediction1 <- predict(glmm1_N, newdata = nd_N_fix)
+
+nd_N_fix <- expand.grid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Cold/Cool", "Warm/Hot"), waterbody_type.x = "lotic")
+nd_N_fix$fish_scientific_name <- sp_var_sp_interest$fish_scientific_name[1]
+# Population-level predictions (exclude random effects)
+pred_N <- predict(glmm1_N, newdata = nd_N_fix, re.form = NA,se.fit = TRUE)
+
+nd_N_fix <- nd_N_fix %>%
+  mutate(
+    prediction = pred_N$fit,
+    se = pred_N$se.fit,
+    lower = prediction - 1.96 * se,
+    upper = prediction + 1.96 * se
+  )
+#nd_N_fix <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Cold/Cool", "Warm/Hot"),  model = glmm1_N)
+#nd_N_fix$prediction1 <- predict(glmm1_N, newdata = nd_N_fix)
 
 n_sp <- ggplot() +
   geom_line(data = nd_N_cold,aes( x = site_nbspe_log_scale, y = prediction1, group = fish_scientific_name ), color = "#99CCCC", alpha = 0.7) +
   geom_line(data = nd_N_warm,aes( x = site_nbspe_log_scale, y = prediction1, group = fish_scientific_name ), color = "#993333", alpha = 0.7) +
+  geom_ribbon(data = nd_N_fix, aes(x = site_nbspe_log_scale, ymin = lower, ymax = upper, fill = Climate_zone_2cat), alpha = 0.4)+
+  geom_line(data = nd_N_fix,aes( x = site_nbspe_log_scale, y = prediction, group = Climate_zone_2cat, color = Climate_zone_2cat), linewidth = 2)+
+  
  # geom_line(data = nd_N_fix,aes( x = site_nbspe_log_scale, y = prediction1, group = Climate_zone_2cat, color = Climate_zone_2cat), linewidth = 2)+
-  geom_abline(slope = -0.7438, intercept = -4.4769, color = "#99CCCC", linewidth = 2) +
-  geom_abline(slope = -0.7438 +  0.4380, intercept = -4.4769 + 0.3614, color = "#993333", linewidth = 2) +
+ # geom_abline(slope = -0.7438, intercept = -4.4769, color = "#99CCCC", linewidth = 2) +
+#  geom_abline(slope = -0.7438 +  0.4380, intercept = -4.4769 + 0.3614, color = "#993333", linewidth = 2) +
 #  scale_color_manual(values = c("#99CCCC", "#993333")) +
+  scale_color_manual(name = "Climate zone", values = c("Cold/Cool" = "#99CCCC","Warm/Hot" = "#993333")) +
+  scale_fill_manual(name = "Climate zone", values = c("Cold/Cool" = "#99CCCC","Warm/Hot" = "#993333")) +
   theme_classic() +
   xlab("Species Richness (log scaled)") +
-  ylab("Intraspecific Variance in N (log)")
+  ylab("Intraspecific Variance in N (log)") + 
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size = 16))
+
 n_sp
 
 
@@ -201,7 +255,7 @@ n_sp
 
 
 ##see if model runs if species richness is not scaled 
-ggarrange(c_sp, n_sp, labels = c("a", "b"), nrow =1, ncol = 2)
+ggarrange(c_sp, n_sp, labels = c("a", "b"), font.label = list(size = 18, face = "bold"),nrow =1, ncol = 2, legend = c("none"))
 
 ##account for body size in model, just to show that this isn't driven by body size, add into model , then remove 
 
