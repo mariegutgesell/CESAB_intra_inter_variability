@@ -217,6 +217,7 @@ sp_var_sp_interest <- SpVar %>%
   left_join(SiteVar %>% select(FWB_id, site_nbspe), by = "FWB_id") %>%
   filter(fish_scientific_name %in% c("Salmo trutta", "Esox lucius", "Rutilus rutilus", "Cyprinus carpio"))
 
+
 ggplot(sp_var_sp_interest, aes(x = site_nbspe, y = sp_site_var_C, color = log(sp_site_num_ind))) +
   geom_point() +
   geom_smooth(method = "lm")+

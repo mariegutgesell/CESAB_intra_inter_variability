@@ -49,7 +49,7 @@ SpVar <- read.csv("data/SpVar_2sp_75cutoff.csv") %>%
 
 test <- SpVar %>%
  # filter(fish_name_level == "species") %>%
-  select(fish_scientific_name, fish_name_level) %>%
+  select(fish_scientific_name) %>%
   group_by(fish_scientific_name) %>%
   count() %>%
   filter(n >1)
@@ -91,7 +91,7 @@ single_sp_climate <- sp_climate_list %>%
 
 
 sp_interest_list <- single_sp_climate %>%
-  filter(num_fw_present >= 10)
+  filter(num_fw_present >= 8)
 
 
 ##Looking at relationship between species richness and variance within certain species
