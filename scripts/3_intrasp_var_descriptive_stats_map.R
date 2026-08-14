@@ -23,6 +23,10 @@ SiteVar <- read.csv("data/SiteVar_2sp_75cutoff.csv") %>%
     startsWith(Climate_zone_e2, "Wa") ~"Warm/Hot",
   ))
 
+#quick look at climate categories:
+climate <- SiteVar %>%
+  select(Climate_zone, Climate_zone_e, Climate_zone_e2, Climate_zone_2cat) %>%
+  distinct()
 #fwb_climate <- SiteVar %>%
 #  select(FWB_id, Climate_zone_2cat)
 #write.csv(fwb_climate, "data/fwb_climate_list.csv")
@@ -138,6 +142,7 @@ p_map_2
 
 
 ##Brief descriptive stats ----------------
+
 site_var_env <- SiteVar %>%
   select(FWB_id, waterbody_type, Climate_zone_2cat)
 ##Number of communities -- 453 (# of sites) --455
@@ -158,6 +163,50 @@ country_num <- as.data.frame(sites_geo) %>%
   select(country) %>%
   ungroup() %>%
   distinct()
+
+##mean prop intravar
+mean_prop_iv <- SiteVar %>%
+  summarise_at(vars(propintraspecific_N, propintraspecific_C), list(mean = mean))
+
+
+##Pairwise t-tests 
+ttest_df <- SiteVar %>%
+  select(FWB_id, propintraspecific_N, propintraspecific_C) %>%
+  pivot_longer(cols = c(propintraspecific_C, propintraspecific_N), names_to = "isotope", values_to = "pro_intrasp")
+
+ttest_result <- t.test(SiteVar$propintraspecific_C,
+                       SiteVar$propintraspecific_N, paired= TRUE)
+summary(ttest_result)
+
+
+ttest_result
+
+
+ggplot(SiteVar, aes(y = propintraspecific_N, propintraspecific_C)) + 
+  geom_point()
+
+ttest_df <- SiteVar %>%
+  select(FWB_id, propintraspecific_N, propintraspecific_C) %>%
+  drop_na() %>%
+  mutate(
+    difference = propintraspecific_C - propintraspecific_N,
+    higher = case_when(
+      difference > 0 ~ "C higher",
+      difference < 0 ~ "N higher",
+      difference == 0 ~ "Equal"
+    )
+  )
+
+table(ttest_df$higher)
+prop.table(table(ttest_df$higher))
+
+ggplot(ttest_df, aes(x = difference)) +
+  geom_histogram() +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  labs(
+    x = "Within-site difference (C - N)",
+    y = "Number of sites"
+  )
 
 ##MODEL:
 ##glmm w/ ecosystem type, climate 
