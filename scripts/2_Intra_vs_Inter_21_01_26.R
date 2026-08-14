@@ -98,7 +98,7 @@ DataFish_final$collected_sample_length_mm <- as.numeric(DataFish_final$collected
 
 
 SpVar<-DataFish_final %>% 
-  group_by(FWB_id, site_year_code, sp_site,collection_site_id,fish_family, fish_scientific_name, fish_name_level,
+  group_by(FWB_id, site_year_code, sp_site,collection_site_id,fish_family, fish_scientific_name, 
            waterbody_type, 
            #ecosystem_area_km2, ecosystem_width_m,  ##for 3 FWB_id there are two sizes, so i dont think we want to group by this .. not consistent across site
            collection_decimal_longitude, collection_decimal_latitude) %>% 
@@ -129,7 +129,7 @@ test <- SpVar %>%
   select(collection_site_id) %>%
   group_by(collection_site_id) %>%
   count()
-#437 sites - so i think okay .. 
+#436 sites - so i think okay .. 
 
 
 ############################################################
@@ -338,7 +338,7 @@ num_fam <- SpVar %>%
 
 
 
-taxa ##how many species have at least 10 species?
+#taxa ##how many species have at least 10 species?
 sites_10sp <- SiteVar %>%
   filter(site_nbspe >= 8)
 ##potentially focus 
