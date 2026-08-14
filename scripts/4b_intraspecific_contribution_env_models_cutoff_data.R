@@ -174,30 +174,48 @@ glmm5_C <- glmmTMB(propintraspecific_C ~  site_nbspe_log , data = SiteVar, famil
 summary(glmm5_C)
 Anova(glmm5_C)
 
+##final model -- that retains all three fixed effects
+glmm6_C <- glmmTMB(propintraspecific_C ~  site_nbspe_log * Climate_zone_2cat + waterbody_type, data = SiteVar, family = beta_family(link = "logit"))
+summary(glmm6_C)
+Anova(glmm6_C)
+
 min(SiteVar$site_nbspe_log)
 max(SiteVar$site_nbspe_log)
 
-nd_C <- datagrid(site_nbspe_log = seq(0.5, 4, 0.1), model = glmm5_C)
-nd_C$prediction1 <- predict(glmm5_C, newdata = nd_C, type = "response")
+nd_C <- datagrid(site_nbspe_log = seq(0.5, 4, 0.1), Climate_zone_2cat = "Warm/Hot", waterbody_type = "lotic", model = glmm6_C)
+pred_C <- predict(glmm6_C, newdata = nd_C, type = "link", se.fit = TRUE)
+#pred_C <- predict(glmm5_C, newdata = nd_C, type = "response", se.fit = TRUE)
+nd_C <- nd_C %>%
+  mutate(
+    prediction = plogis(pred_C$fit),
+    #se = pred_C$se.fit,
+    lower = plogis(pred_C$fit - 1.96 * pred_C$se.fit),
+    upper = plogis(pred_C$fit + 1.96 * pred_C$se.fit)
+  )
 
 c_site <- ggplot() +
   geom_point(data = SiteVar, aes(x = site_nbspe_log, y = propintraspecific_C, color= Climate_zone_2cat) ) +
   scale_color_manual(name = "Climate zone", values = c("#99CCCC","#993333" )) + 
-  geom_line(data = nd_C, aes(x = site_nbspe_log, y = prediction1), color = "black")+
+  geom_ribbon(data = nd_C, aes(x = site_nbspe_log,ymin = lower, ymax = upper), alpha = 0.4) +
+  geom_line(data = nd_C, aes(x = site_nbspe_log, y = prediction), color = "black")+
  # geom_abline(slope = -0.44131, intercept =  0.83235 , color = "black", linewidth = 2) +
   theme_classic() +
   xlab("Species Richness (log)") +
-  ylab("Proportion Intraspecific Variance in C")
+  ylab("CIV in Carbon") + 
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size = 16))
 c_site
 
 c_violin <- ggplot(SiteVar, aes(y = propintraspecific_C, x = "")) +
   geom_violin() +
+  geom_jitter(width = 0.1, alpha = 0.2, size = 1.5) +
+  stat_summary(fun = median, geom = "point", size = 5, shape = 18) +
   theme_classic() +
-  labs(y = "Proportion Intraspecific Variance in C", x = "") +
+  labs(y = "CIV in Carbon", x = "") +
   theme(
     axis.text.x = element_blank(),
     axis.ticks.x = element_blank()
-  )
+  )+ 
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size = 16))
 c_violin
 ##NITROGEN 
 
@@ -234,30 +252,49 @@ simulationOutput <- simulateResiduals(fittedModel = glmm8_N, plot = FALSE)
 plot(simulationOutput)
 #DHARMa::residuals(simulationOutput)
 
+##final model -- retain significant interaction and fixed effect of ecosystem type 
+glmm9_N <- glmmTMB(propintraspecific_N ~   site_nbspe_log*Climate_zone_2cat + waterbody_type, data = SiteVar, family = beta_family(link = "logit"))
+summary(glmm9_N)
+Anova(glmm9_N)
 
 
-nd_N <- datagrid(site_nbspe_log = seq(0.5, 4, 0.1), Climate_zone_2cat = c("Cold/Cool", "Warm/Hot"), model = glmm8_N)
-nd_N$prediction1 <- predict(glmm8_N, newdata = nd_N, type = "response")
+nd_N <- datagrid(site_nbspe_log = seq(0.5, 4, 0.1), Climate_zone_2cat = c("Cold/Cool", "Warm/Hot"),waterbody_type = "lotic", model = glmm9_N)
+pred_N <- predict(glmm9_N, newdata = nd_N, type = "link", se.fit = TRUE)
+#pred_N <- predict(glmm8_N, newdata = nd_N, type = "response", se.fit = TRUE)
+
+nd_N <- nd_N %>%
+  mutate(
+    prediction = plogis(pred_N$fit),
+    lower = plogis(pred_N$fit - 1.96 * pred_N$se.fit),
+    upper = plogis(pred_N$fit + 1.96 * pred_N$se.fit)
+  )
+
 
 n_site <- ggplot() +
   geom_point(data = SiteVar, aes(x = site_nbspe_log, y = propintraspecific_N, color= Climate_zone_2cat) ) +
-  scale_color_manual(name = "Climate zone", values = c("#99CCCC","#993333" )) + 
-  geom_line(data = nd_N, aes(x = site_nbspe_log, y = prediction1, group = Climate_zone_2cat, color = Climate_zone_2cat))+
-#  scale_color_manual(values = c("#99CCCC","#993333" )) + 
+ # scale_color_manual(name = "Climate zone", values = c("#99CCCC","#993333" )) + 
+  geom_ribbon(data = nd_N, aes(x = site_nbspe_log,ymin = lower, ymax = upper, fill = Climate_zone_2cat), alpha = 0.4) +
+   geom_line(data = nd_N, aes(x = site_nbspe_log, y = prediction, group = Climate_zone_2cat, color = Climate_zone_2cat))+
+  scale_color_manual(name ="Climate zone", values = c("#99CCCC","#993333" )) + 
+  scale_fill_manual(name ="Climate zone", values = c("#99CCCC","#993333" )) + 
   # geom_abline(slope = -0.44131, intercept =  0.83235 , color = "black", linewidth = 2) +
   theme_classic() +
   xlab("Species Richness (log)") +
-  ylab("Proportion Intraspecific Variance in N")
+  ylab("CIV in Nitrogen")+ 
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size = 16))
 n_site
 
 n_violin <- ggplot(SiteVar, aes(y = propintraspecific_N, x = "")) +
   geom_violin() +
+  geom_jitter(width = 0.1, alpha = 0.2, size = 1.5) +
+  stat_summary(fun = median, geom = "point", size = 5, shape = 18) +
   theme_classic() +
-  labs(y = "Proportion Intraspecific Variance in N", x = "") +
+  labs(y = "CIV in Nitrogen", x = "") +
   theme(
     axis.text.x = element_blank(),
     axis.ticks.x = element_blank()
-  )
+  )+ 
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size = 16))
 n_violin
 
 
@@ -266,7 +303,100 @@ c_plot
 n_plot <- ggarrange(n_violin, n_site, nrow = 1, ncol = 2 , widths = c(1, 3))
 n_plot
 
-ggarrange(c_plot, n_plot, labels = c("a", "b"), nrow = 2, ncol =1)
+ggarrange(c_plot, n_plot, labels = c("a", "b"),font.label = list(size = 18, face = "bold"), nrow = 2, ncol =1)
+
+###2D analysis -- both isotopes combined
+##final model -- retain significant interaction and fixed effect of ecosystem type 
+glmm_t1 <- glmmTMB(propintraspecific_Total ~   site_nbspe_log*Climate_zone_2cat * waterbody_type, data = SiteVar, family = beta_family(link = "logit"))
+summary(glmm_t1)
+Anova(glmm_t1)
+
+
+
+
+glmm_t <- glmmTMB(propintraspecific_Total ~   site_nbspe_log*Climate_zone_2cat + waterbody_type, data = SiteVar, family = beta_family(link = "logit"))
+summary(glmm_t)
+Anova(glmm_t)
+
+max(SiteVar$site_nbspe_log)
+min(SiteVar$site_nbspe_log)
+
+nd_T <- datagrid(site_nbspe_log = seq(0.5, 4, 0.1), Climate_zone_2cat = c("Cold/Cool", "Warm/Hot"),waterbody_type = "lotic", model = glmm_t)
+pred_T <- predict(glmm_t, newdata = nd_T, type = "link", se.fit = TRUE)
+#pred_N <- predict(glmm8_N, newdata = nd_N, type = "response", se.fit = TRUE)
+
+nd_T <- nd_T %>%
+  mutate(
+    prediction = plogis(pred_T$fit),
+    lower = plogis(pred_T$fit - 1.96 * pred_T$se.fit),
+    upper = plogis(pred_T$fit + 1.96 * pred_T$se.fit)
+  )
+
+
+total_site <- ggplot() +
+  geom_point(data = SiteVar, aes(x = site_nbspe_log, y = propintraspecific_Total, color= Climate_zone_2cat) ) +
+  # scale_color_manual(name = "Climate zone", values = c("#99CCCC","#993333" )) + 
+  geom_ribbon(data = nd_T, aes(x = site_nbspe_log,ymin = lower, ymax = upper, fill = Climate_zone_2cat), alpha = 0.4) +
+  geom_line(data = nd_T, aes(x = site_nbspe_log, y = prediction, group = Climate_zone_2cat, color = Climate_zone_2cat))+
+  scale_color_manual(name ="Climate zone", values = c("#99CCCC","#993333" )) + 
+  scale_fill_manual(name ="Climate zone", values = c("#99CCCC","#993333" )) + 
+  # geom_abline(slope = -0.44131, intercept =  0.83235 , color = "black", linewidth = 2) +
+  theme_classic() +
+  xlab("Species Richness (log)") +
+  ylab("Total CIV")+ 
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size = 16))
+total_site
+
+total_violin <- ggplot(SiteVar, aes(y = propintraspecific_Total, x = "")) +
+  geom_violin() +
+  geom_jitter(width = 0.1, alpha = 0.2, size = 1.5) +
+  stat_summary(fun = median, geom = "point", size = 5, shape = 18) +
+  theme_classic() +
+  labs(y = "Total CIV", x = "") +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )+ 
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size = 16))
+total_violin
+
+
+
+
+##difference between lotic and lentic?
+ggplot(SiteVar, aes(x = waterbody_type, y = propintraspecific_Total)) +
+  geom_boxplot()
+
+nd_T_2 <- datagrid(site_nbspe_log = seq(0.5, 4, 0.1), Climate_zone_2cat = c("Cold/Cool"),waterbody_type = c("lotic", "lentic"), model = glmm_t)
+pred_T_2 <- predict(glmm_t, newdata = nd_T_2, type = "link", se.fit = TRUE)
+#pred_N <- predict(glmm8_N, newdata = nd_N, type = "response", se.fit = TRUE)
+
+nd_T_2 <- nd_T_2 %>%
+  mutate(
+    prediction = plogis(pred_T_2$fit),
+    lower = plogis(pred_T_2$fit - 1.96 * pred_T_2$se.fit),
+    upper = plogis(pred_T_2$fit + 1.96 * pred_T_2$se.fit)
+  )
+
+total_site_wb <- ggplot() +
+  geom_point(data = SiteVar, aes(x = site_nbspe_log, y = propintraspecific_Total, color= waterbody_type) ) +
+  # scale_color_manual(name = "Climate zone", values = c("#99CCCC","#993333" )) + 
+  geom_ribbon(data = nd_T_2, aes(x = site_nbspe_log,ymin = lower, ymax = upper, fill = waterbody_type), alpha = 0.4) +
+  geom_line(data = nd_T_2, aes(x = site_nbspe_log, y = prediction, group = waterbody_type, color = waterbody_type))+
+  scale_color_manual(name ="waterbody", values = c("darkgrey","black" )) + 
+  scale_fill_manual(name ="waterbody", values = c("darkgrey","black" )) + 
+  # geom_abline(slope = -0.44131, intercept =  0.83235 , color = "black", linewidth = 2) +
+  theme_classic() +
+  xlab("Species Richness (log)") +
+  ylab("Total CIV")+ 
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size = 16))
+total_site_wb
+
+
+sp_total <- ggarrange(total_site, total_site_wb, labels = c("b", "c"),font.label = list(size = 18, face = "bold"), nrow = 2, ncol = 1 )
+
+ggarrange(total_violin, sp_total, labels = c("a", ""),font.label = list(size = 18, face = "bold"), nrow = 1, ncol = 2, widths = c(1, 3)  )
+
 ##Write function that conducts beta regressions or ANOVAs over all 3 datasets 
 beta_reg_univariate <- function(dat,
                                 res = "propintraspecific_C",
