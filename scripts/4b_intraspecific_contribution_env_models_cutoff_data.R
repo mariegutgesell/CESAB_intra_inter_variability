@@ -207,7 +207,8 @@ c_site
 
 c_violin <- ggplot(SiteVar, aes(y = propintraspecific_C, x = "")) +
   geom_violin() +
-  geom_jitter(width = 0.1, alpha = 0.2, size = 1.5) +
+   geom_jitter(width = 0.1, alpha = 0.7, size = 1.5, aes(color = Climate_zone_2cat)) +
+  scale_color_manual(name = "Climate zone", values = c("#99CCCC","#993333" )) + 
   stat_summary(fun = median, geom = "point", size = 5, shape = 18) +
   theme_classic() +
   labs(y = "CIV in Carbon", x = "") +
@@ -215,7 +216,7 @@ c_violin <- ggplot(SiteVar, aes(y = propintraspecific_C, x = "")) +
     axis.text.x = element_blank(),
     axis.ticks.x = element_blank()
   )+ 
-  theme(axis.text = element_text(size = 14), axis.title = element_text(size = 16))
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size = 16), legend.position = "none")
 c_violin
 ##NITROGEN 
 
@@ -286,7 +287,8 @@ n_site
 
 n_violin <- ggplot(SiteVar, aes(y = propintraspecific_N, x = "")) +
   geom_violin() +
-  geom_jitter(width = 0.1, alpha = 0.2, size = 1.5) +
+  geom_jitter(width = 0.1, alpha = 0.7, size = 1.5, aes(color = Climate_zone_2cat)) +
+  scale_color_manual(name = "Climate zone", values = c("#99CCCC","#993333" )) + 
   stat_summary(fun = median, geom = "point", size = 5, shape = 18) +
   theme_classic() +
   labs(y = "CIV in Nitrogen", x = "") +
@@ -294,7 +296,7 @@ n_violin <- ggplot(SiteVar, aes(y = propintraspecific_N, x = "")) +
     axis.text.x = element_blank(),
     axis.ticks.x = element_blank()
   )+ 
-  theme(axis.text = element_text(size = 14), axis.title = element_text(size = 16))
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size = 16), legend.position = "none")
 n_violin
 
 

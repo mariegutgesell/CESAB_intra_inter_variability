@@ -158,6 +158,12 @@ clim_cat <- SpVar %>%
   group_by(fish_scientific_name) %>%
   count()
 
+climate_sites <- SiteVar %>%
+  select(FWB_id, Climate_zone_2cat) %>%
+  distinct() %>%
+  group_by(Climate_zone_2cat) %>%
+  count()
+
 ##Number of countries:
 country_num <- as.data.frame(sites_geo) %>%
   select(country) %>%
@@ -166,7 +172,8 @@ country_num <- as.data.frame(sites_geo) %>%
 
 ##mean prop intravar
 mean_prop_iv <- SiteVar %>%
-  summarise_at(vars(propintraspecific_N, propintraspecific_C), list(mean = mean))
+  summarise_at(vars(propintraspecific_N, propintraspecific_C), list(mean = mean, sd))
+
 
 
 ##Pairwise t-tests 
@@ -211,35 +218,7 @@ ggplot(ttest_df, aes(x = difference)) +
 ##MODEL:
 ##glmm w/ ecosystem type, climate 
 
-##Looking at relationship between species richness and variance within certain species
-##salmo trutta , pike, roach, carp? 
-sp_var_sp_interest <- SpVar %>%
-  left_join(SiteVar %>% select(FWB_id, site_nbspe), by = "FWB_id") %>%
-  filter(fish_scientific_name %in% c("Salmo trutta", "Esox lucius", "Rutilus rutilus", "Cyprinus carpio"))
 
-
-ggplot(sp_var_sp_interest, aes(x = site_nbspe, y = sp_site_var_C, color = log(sp_site_num_ind))) +
-  geom_point() +
-  geom_smooth(method = "lm")+
-  facet_wrap(~fish_scientific_name, scale = "free")
-ggplot(sp_var_sp_interest, aes(x = site_nbspe, y = sp_site_var_N, color = log(sp_site_num_ind))) +
-  geom_point() +
-  geom_smooth(method = "lm")+
-  facet_wrap(~fish_scientific_name, scale = "free")
-
-ggplot(sp_var_sp_interest, aes(x = sp_site_body_size_range, y = sp_site_var_C)) +
-  geom_point() +
-  geom_smooth(method = "lm")+
-  facet_wrap(~fish_scientific_name, scale = "free")
-
-ggplot(sp_var_sp_interest, aes(x = sp_site_body_size_range, y = sp_site_var_N)) +
-  geom_point() +
-  geom_smooth(method = "lm")+
-  facet_wrap(~fish_scientific_name, scale = "free")
-
-ggplot(sp_var_sp_interest, aes(x = sp_site_var_length, y = sp_site_var_C)) +
-  geom_point() +
-  facet_wrap(~fish_scientific_name, scale = "free")
 ##Mean richness:
 mean_rich <- SiteVar %>%
   summarise(mean_richness = mean(site_nbspe),

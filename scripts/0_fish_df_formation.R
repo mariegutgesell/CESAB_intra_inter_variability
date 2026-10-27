@@ -391,3 +391,11 @@ ls3 <- DataFish_final %>%
 
 #test <- anti_join(sites_437, sites_436, by = "FWB_id")
 ##FWB_0757 -- why did this site disappear? because only 70% of its species (less than 75% have more than 3 individuals)
+
+
+
+##quick biplot checks 
+test <- DataFish_final %>%
+  filter(FWB_id == "FWB_0907")
+ggplot(test, aes(x=d13C, y = d15N, group = scientific_name, color = scientific_name)) + 
+  geom_point()

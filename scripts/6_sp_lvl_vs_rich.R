@@ -115,7 +115,6 @@ clim_hab_num <- sp_habitat_list %>%
 group_by(fish_scientific_name) %>%
   count()
 
-
 hist(sp_var_sp_interest$sp_site_var_C)
 hist(sp_var_sp_interest$sp_site_var_C_log)
 hist(sp_var_sp_interest$sp_site_var_N)
@@ -171,6 +170,7 @@ nd_C_cold <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat 
 nd_C_cold$prediction1 <- predict(glmm1_C, newdata = nd_C_cold)
 
 nd_C_warm <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Warm/Hot"),waterbody_type.x = "lotic",  fish_scientific_name = unique(sp_warm$fish_scientific_name), model = glmm1_C)
+
 nd_C_warm$prediction1 <- predict(glmm1_C, newdata = nd_C_warm)
 
 #nd_N_fix <- datagrid(site_nbspe_log_scale = seq(-2, 4, 0.1), Climate_zone_2cat = c("Cold/Cool", "Warm/Hot"),  model = glmm1_N)
@@ -258,6 +258,113 @@ n_sp
 ggarrange(c_sp, n_sp, labels = c("a", "b"), font.label = list(size = 18, face = "bold"),nrow =1, ncol = 2, legend = c("none"))
 
 ##account for body size in model, just to show that this isn't driven by body size, add into model , then remove 
+
+##Plotting out representative species 
+##question -- do we want to just plot raw, or do we want to plot the random slopes etc. as predicted from the model? i think predicted from the model ... and also show the underlying points ... 
+
+species_to_plot <- c("Salvelinus fontinalis", "Catostomus commersonii", "Gambusia holbrooki", "Leiopotherapon unicolor")
+
+
+# Extract observations for selected species
+sp_selected <- sp_var_sp_interest %>%
+  filter(fish_scientific_name %in% species_to_plot)
+
+species_climate <- sp_selected %>%
+  distinct(fish_scientific_name, Climate_zone_2cat)
+
+# Generate prediction grid for each species for dC, for climate species is from
+nd_species_C <- species_climate %>%
+  group_by(fish_scientific_name, Climate_zone_2cat) %>%
+  reframe(
+    site_nbspe_log_scale = seq(
+      min(sp_selected$site_nbspe_log_scale[
+        sp_selected$fish_scientific_name == first(fish_scientific_name)
+      ], na.rm = TRUE),
+      max(sp_selected$site_nbspe_log_scale[
+        sp_selected$fish_scientific_name == first(fish_scientific_name)
+      ], na.rm = TRUE),
+      length.out = 100
+    )
+  ) %>%
+  mutate(waterbody_type.x = "lotic")
+
+# Predict INCLUDING species-specific random effects
+nd_species_C$prediction <- predict(
+  glmm1_C,
+  newdata = nd_species_C,
+  re.form = NULL
+)
+
+
+sp_selected$fish_scientific_name <- ordered(sp_selected$fish_scientific_name, levels = c("Salvelinus fontinalis", "Catostomus commersonii", "Gambusia holbrooki", "Leiopotherapon unicolor"))
+nd_species_C$fish_scientific_name <- ordered(nd_species_C$fish_scientific_name, levels = c("Salvelinus fontinalis", "Catostomus commersonii", "Gambusia holbrooki", "Leiopotherapon unicolor"))
+
+ggplot() +
+  # Observed data
+  geom_point(data = sp_selected, aes(x = site_nbspe_log_scale, y = sp_site_var_C_log, color = Climate_zone_2cat), alpha = 0.5, size = 2) +
+  # Species-specific model predictions
+  geom_line(data = nd_species_C,aes(x = site_nbspe_log_scale, y = prediction,color = Climate_zone_2cat), linewidth = 1.2) +
+  facet_wrap(~ fish_scientific_name, scales = "free_y") +
+  scale_color_manual(values = c("Cold/Cool" = "#99CCCC","Warm/Hot" = "#993333")) +
+  theme_classic() +
+  labs(
+    x = "Species richness (log scaled)",
+    y = "Intraspecific variance in C (log)",
+    color = "Climate zone"
+  ) +
+  theme(
+    strip.text = element_text(size = 12, face = "italic"),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14)
+  )
+
+# Generate prediction grid for each species for dN, for climate species is from
+nd_species_N <- species_climate %>%
+  group_by(fish_scientific_name, Climate_zone_2cat) %>%
+  reframe(
+    site_nbspe_log_scale = seq(
+      min(sp_selected$site_nbspe_log_scale[
+        sp_selected$fish_scientific_name == first(fish_scientific_name)
+      ], na.rm = TRUE),
+      max(sp_selected$site_nbspe_log_scale[
+        sp_selected$fish_scientific_name == first(fish_scientific_name)
+      ], na.rm = TRUE),
+      length.out = 100
+    )
+  ) %>%
+  mutate(waterbody_type.x = "lotic")
+
+# Predict INCLUDING species-specific random effects
+nd_species_N$prediction <- predict(
+  glmm1_N,
+  newdata = nd_species_N,
+  re.form = NULL
+)
+
+
+sp_selected$fish_scientific_name <- ordered(sp_selected$fish_scientific_name, levels = c("Salvelinus fontinalis", "Catostomus commersonii", "Gambusia holbrooki", "Leiopotherapon unicolor"))
+nd_species_N$fish_scientific_name <- ordered(nd_species_N$fish_scientific_name, levels = c("Salvelinus fontinalis", "Catostomus commersonii", "Gambusia holbrooki", "Leiopotherapon unicolor"))
+
+ggplot() +
+  # Observed data
+  geom_point(data = sp_selected, aes(x = site_nbspe_log_scale, y = sp_site_var_N_log, color = Climate_zone_2cat), alpha = 0.5, size = 2) +
+  # Species-specific model predictions
+  geom_line(data = nd_species_N,aes(x = site_nbspe_log_scale, y = prediction,color = Climate_zone_2cat), linewidth = 1.2) +
+  facet_wrap(~ fish_scientific_name, scales = "free_y") +
+  scale_color_manual(values = c("Cold/Cool" = "#99CCCC","Warm/Hot" = "#993333")) +
+  theme_classic() +
+  labs(
+    x = "Species richness (log scaled)",
+    y = "Intraspecific variance in N (log)",
+    color = "Climate zone"
+  ) +
+  theme(
+    strip.text = element_text(size = 12, face = "italic"),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14)
+  )
+
+
 
 ##OLD --- 
 ggplot(sp_var_sp_interest, aes(x = log(site_nbspe), y = log(sp_site_var_N), group = fish_species, color = Climate_zone_2cat)) +
